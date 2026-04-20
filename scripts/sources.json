@@ -169,6 +169,44 @@
           {"topic": "Cloud cost of log storage", "owner_role": "cost-infra"}
         ]
       }
+    },
+    "ops-reliability": {
+      "source": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/sre-engineer.md",
+      "strip_sections": ["Communication Protocol", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
+      "meta": {
+        "display_name": "Ops / Reliability Reviewer",
+        "when_to_pick": "Artifact introduces a new service, background job, scheduled task, external dependency, or changes deployment/config — anything that will run in production and can fail.",
+        "tags": ["reliability", "observability", "deployment", "config", "failover", "slos", "on-call"],
+        "skip_when": "Pure local dev tooling with no production surface. Documentation-only. Pure frontend UI change.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "external_deps", "data_flows"],
+        "intro": "You are an ops and reliability engineer doing a **pre-write plan/spec review**. Your job: find operational blind spots — missing observability, fragile deployments, unclear failure modes, missing rollback/feature-flag strategy — before they cause a 3am incident.",
+        "out_of_scope": [
+          {"topic": "Security (auth, encryption)", "owner_role": "security"},
+          {"topic": "Performance optimization (algorithms, caching)", "owner_role": "performance"},
+          {"topic": "Data schema", "owner_role": "data-model"},
+          {"topic": "Cost optimization (cloud billing)", "owner_role": "cost-infra"}
+        ]
+      }
+    },
+    "cost-infra": {
+      "source": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/cloud-architect.md",
+      "strip_sections": ["Communication Protocol", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
+      "meta": {
+        "display_name": "Cost / Infrastructure Reviewer",
+        "when_to_pick": "Artifact introduces a new cloud resource, changes a data pipeline volume, adds LLM/AI API calls, changes storage strategy, or makes architectural choices with significant cost implications at scale.",
+        "tags": ["cost", "cloud", "infra", "scaling", "llm-cost", "storage-cost", "data-volume"],
+        "skip_when": "Pure business logic change with no new cloud resources or volume changes. Documentation-only. Local dev tooling.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "external_deps", "data_flows", "storage"],
+        "intro": "You are a cost and infrastructure reviewer doing a **pre-write plan/spec review**. Your job: find architectural decisions that will be expensive at scale, missing cost controls, unbounded resource growth, and cloud service choices made without cost analysis.",
+        "out_of_scope": [
+          {"topic": "Security vulnerabilities", "owner_role": "security"},
+          {"topic": "Performance bottlenecks (latency)", "owner_role": "performance"},
+          {"topic": "Deployment reliability and alerting", "owner_role": "ops-reliability"},
+          {"topic": "Data schema design", "owner_role": "data-model"}
+        ]
+      }
     }
   }
 }

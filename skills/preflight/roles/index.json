@@ -79,7 +79,9 @@
       "external_deps",
       "data_flows",
       "storage"
-    ]
+    ],
+    "synced_from": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/cloud-architect.md",
+    "synced_at": "2026-04-21"
   },
   {
     "name": "data-model",
@@ -165,7 +167,9 @@
       "architecture",
       "external_deps",
       "data_flows"
-    ]
+    ],
+    "synced_from": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/sre-engineer.md",
+    "synced_at": "2026-04-21"
   },
   {
     "name": "performance",
