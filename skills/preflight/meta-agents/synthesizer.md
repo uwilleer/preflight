@@ -63,7 +63,7 @@ Return **only** this JSON:
 ```json
 {
   "verdict": "APPROVE" | "REVISE" | "REJECT",
-  "panel": ["security", "performance", "contrarian-strategist"],
+  "panel": ["security", "performance", "contrarian-strategist"],  // array of role name strings only
   "must_fix": [
     {
       "title": "Unsanitized user input in /login",
