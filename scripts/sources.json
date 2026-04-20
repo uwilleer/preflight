@@ -20,7 +20,8 @@
       }
     },
     "performance": {
-      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/checkov-choose-optimal-algorithms.md",
+      "source": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/performance-engineer.md",
+      "strip_sections": ["Communication Protocol", "Performance Assessment", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
       "meta": {
         "display_name": "Performance Reviewer",
         "when_to_pick": "Artifact describes data processing, queries, loops, caching, or any operation with non-trivial input size.",
@@ -38,7 +39,8 @@
       }
     },
     "testing": {
-      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/angular-comprehensive-test-coverage.md",
+      "source": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/test-automator.md",
+      "strip_sections": ["Communication Protocol", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
       "meta": {
         "display_name": "Testing Reviewer",
         "when_to_pick": "Artifact describes new functionality, a bug fix, or a refactor where test strategy is not specified.",
@@ -92,10 +94,8 @@
       }
     },
     "data-model": {
-      "sources": [
-        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/appwrite-ensure-database-transactional-integrity.md",
-        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/appwrite-comprehensive-migration-planning.md"
-      ],
+      "source": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/database-administrator.md",
+      "strip_sections": ["Communication Protocol", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
       "meta": {
         "display_name": "Data Model Reviewer",
         "when_to_pick": "Artifact introduces or changes a database schema, data structure, storage format, or domain model that will outlive the current release.",
@@ -133,10 +133,8 @@
       }
     },
     "error-handling": {
-      "sources": [
-        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/aider-handle-errors-gracefully.md",
-        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ai-async-error-callbacks.md"
-      ],
+      "source": "https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/error-detective.md",
+      "strip_sections": ["Communication Protocol", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
       "meta": {
         "display_name": "Error Handling Reviewer",
         "when_to_pick": "Artifact describes operations that can fail — external calls, IO, DB queries, async jobs, user input processing — and doesn't specify how errors are handled.",
@@ -154,7 +152,8 @@
       }
     },
     "observability": {
-      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/airflow-context-rich-log-messages.md",
+      "source": "https://raw.githubusercontent.com/wshobson/agents/main/plugins/observability-monitoring/agents/observability-engineer.md",
+      "strip_sections": ["Communication Protocol", "Development Workflow", "Progress tracking", "Delivery notification", "Integration with other agents"],
       "meta": {
         "display_name": "Observability Reviewer",
         "when_to_pick": "Artifact describes a new service, background job, data pipeline, or feature with non-trivial state changes where logging and monitoring are not addressed.",
