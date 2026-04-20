@@ -1,27 +1,34 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.0] — 2026-04-21
 
 ### Added
-- Initial design spec v1 (`docs/specs/2026-04-20-preflight-design.md`).
+- Initial design spec v1 → v2 after independent `plan-critic` pass.
 - Repo scaffold: README, LICENSE (MIT), .gitignore, skills/, docs/, evals/.
-- Milestone 1 — vertical slice:
+- **Milestone 1** — vertical slice:
   - `skills/preflight/SKILL.md` — main skill with triggers and 9-step pipeline.
   - `skills/preflight/meta-agents/{selector,synthesizer}.md` — 2 meta-agents.
-  - `skills/preflight/roles/{security,performance,contrarian-strategist}.md` —
-    3 seed roles with prompt-injection defense blocks.
+  - `skills/preflight/roles/{security,performance,contrarian-strategist}.md` — 3 seed roles with prompt-injection defense blocks.
   - `skills/preflight/schemas/expert-report.json` — JSON-schema for expert output.
   - `Makefile` with `build-index` / `test-index` targets.
-  - `scripts/frontmatter-to-json.awk` — portable YAML-frontmatter → JSON parser
-    (replaces planned yq dependency with awk+jq to avoid an extra brew install).
-  - `skills/preflight/roles/index.json` — generated (3 roles, validated).
+  - `scripts/frontmatter-to-json.awk` — portable YAML-frontmatter → JSON parser (replaces planned yq).
+- **Milestone 2** — smoke runs:
+  - Live run on `plan-buggy-auth` fixture — security/performance experts active.
+  - Injection fixture: prompt injection attempt correctly flagged as `must_fix`, not executed.
+- **Milestone 3** — full catalog:
+  - 7 additional roles: `testing`, `concurrency`, `api-design`, `data-model`, `ops-reliability`, `cost-infra`, `supply-chain`.
+  - Conventions context: `conventions` + `architecture` sections always sent to all experts.
+  - All roles include: injection-defense block, project conventions paragraph, `out_of_scope` field.
+- **Milestone 4** — evals suite:
+  - 8 fixtures (4 real post-mortem, 2 synthetic, 1 injection, 1 good plan).
+  - `evals/grading.json` frozen by git tag `evals-grading-v1`.
+  - `evals/run_eval.py` — checklist and scoring modes.
+- **Milestone 5** — open-source release:
+  - `README.md` — installation, usage, pipeline, role catalog, examples.
+  - `CONTRIBUTING.md` — how to add a role (one PR, one file, checklist).
 
 ### Changed
-- Spec iterated v1 → v2 after independent `plan-critic` pass (verdict REVISE).
-  Summary of accepted changes: Roster-gen + Pruner merged into single
-  `Selector` meta-agent for MVP; cap lowered 8 → 5; expert model set to
-  Haiku with Opus opt-in for security/contrarian; prompt-injection defense
-  mandatory in every role; grading.json frozen by git tag; evals criterion
-  rewritten from naive "+30% recall" to "≥1 MUST found on real post-mortem
-  fixtures missed by plan-critic baseline"; 3 NICE fixes applied.
-  Full log in `docs/specs/2026-04-20-preflight-design.md` → "Meta-experiment log".
+- Expert model default changed from Haiku → Sonnet after smoke run feedback.
+- Selector cap: 8 → 5 (from plan-critic pass).
+- Roster-gen + Pruner merged into single `Selector` meta-agent for MVP.
+- `out_of_scope` used as cross-confirmation signal in Synthesizer.
