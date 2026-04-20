@@ -28,8 +28,8 @@ Report (APPROVE / REVISE / REJECT + actionable list)
 
 - [x] Design spec v1 — `docs/specs/2026-04-20-preflight-design.md`
 - [x] Independent `plan-critic` pass → REVISE → spec v2 iterated
-- [ ] Meta-agents (`selector`, `synthesizer`)
-- [ ] Base role catalog (10 roles, with prompt-injection defense)
+- [x] Meta-agents (`selector`, `synthesizer`)
+- [~] Base role catalog — 3/10 seed roles with prompt-injection defense
 - [ ] First live run on a buggy-plan fixture + injection fixture
 - [ ] Evals suite vs `plan-critic` baseline (grading.json frozen by git tag)
 - [ ] Open-source release (v0.1.0)

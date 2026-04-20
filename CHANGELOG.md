@@ -5,6 +5,16 @@
 ### Added
 - Initial design spec v1 (`docs/specs/2026-04-20-preflight-design.md`).
 - Repo scaffold: README, LICENSE (MIT), .gitignore, skills/, docs/, evals/.
+- Milestone 1 — vertical slice:
+  - `skills/preflight/SKILL.md` — main skill with triggers and 9-step pipeline.
+  - `skills/preflight/meta-agents/{selector,synthesizer}.md` — 2 meta-agents.
+  - `skills/preflight/roles/{security,performance,contrarian-strategist}.md` —
+    3 seed roles with prompt-injection defense blocks.
+  - `skills/preflight/schemas/expert-report.json` — JSON-schema for expert output.
+  - `Makefile` with `build-index` / `test-index` targets.
+  - `scripts/frontmatter-to-json.awk` — portable YAML-frontmatter → JSON parser
+    (replaces planned yq dependency with awk+jq to avoid an extra brew install).
+  - `skills/preflight/roles/index.json` — generated (3 roles, validated).
 
 ### Changed
 - Spec iterated v1 → v2 after independent `plan-critic` pass (verdict REVISE).

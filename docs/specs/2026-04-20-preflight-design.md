@@ -124,7 +124,8 @@ context_sections: [auth, data_flows, api_surface]   # из context_pack заби
 ├── LICENSE                            # MIT
 ├── .gitignore
 ├── CHANGELOG.md
-├── Makefile                           # build-index target (bash/yq inline, без python)
+├── Makefile                           # build-index target (bash+awk+jq, без python и yq)
+├── scripts/frontmatter-to-json.awk    # portable YAML-frontmatter → JSON parser
 ├── skills/preflight/
 │   ├── SKILL.md                       # frontmatter + тело навыка
 │   ├── roles/
@@ -180,7 +181,7 @@ context_sections: [auth, data_flows, api_surface]   # из context_pack заби
 7. Написать `skills/preflight/SKILL.md` с frontmatter + триггерами.
 8. Написать `meta-agents/selector.md` и `meta-agents/synthesizer.md` по скелетам из этой спеки.
 9. Создать 3 базовые роли для dog-food: `roles/security.md`, `performance.md`, `contrarian-strategist.md`. Во всех — встроенный injection-defense блок.
-10. Написать `Makefile` с target `build-index`: bash + yq one-liner, генерит `roles/index.json`.
+10. Написать `Makefile` с target `build-index`: bash + awk + jq, генерит `roles/index.json` через `scripts/frontmatter-to-json.awk`.
 11. Написать `schemas/expert-report.json` (JSON-schema).
 
 ### Milestone 2 — Первый живой прогон + injection test
@@ -231,7 +232,7 @@ context_sections: [auth, data_flows, api_surface]   # из context_pack заби
 - **Шаблон роли** — формат `superpowers:skill-creator/agents/*.md` (grader, comparator, analyzer).
 - **`researcher`** (`~/.claude/skills/researcher/`) — возможный исполнитель шага 4 (Context pack) с секционированием по тагам.
 - **`dispatching-parallel-agents`** (superpowers) — reference по параллельному dispatch.
-- **`yq`** (brew-installed) — для Makefile `build-index` target, парсит YAML frontmatter без Python.
+- **`awk` + `jq`** — для Makefile `build-index` target, парсит ограниченный YAML frontmatter (plain/quoted string, bracketed list) без Python и без brew-зависимостей. Реализация: `scripts/frontmatter-to-json.awk` (v2 change: изначально планировался `yq`, заменён на awk, чтобы не тянуть ещё одну brew-зависимость — полный YAML нам не нужен, формат наших frontmatter'ов ограниченный).
 
 ## Verification
 

@@ -1,0 +1,61 @@
+[
+  {
+    "name": "contrarian-strategist",
+    "when_to_pick": "Artifact commits to a specific architecture, library, methodology, or approach that could plausibly be done differently. Useful when the user wants the framing challenged, not just the details.",
+    "tags": [
+      "framing",
+      "build-vs-buy",
+      "yagni",
+      "scope",
+      "architecture-choice"
+    ],
+    "skip_when": "Pure bug-fix plan, artifact is a mandated compliance change, artifact is a tiny localized change with no architectural commitment.",
+    "model": "opus",
+    "context_sections": [
+      "api_surface",
+      "external_deps"
+    ]
+  },
+  {
+    "name": "performance",
+    "when_to_pick": "Artifact mentions latency, throughput, scale targets, hot paths, database queries, caching, or changes to code that runs per-request/per-event in high volume.",
+    "tags": [
+      "latency",
+      "throughput",
+      "hot-path",
+      "caching",
+      "db-queries",
+      "algorithmic-complexity"
+    ],
+    "skip_when": "One-off scripts, admin tools run rarely, pure UI text, documentation, low-traffic internal endpoints with no latency SLO.",
+    "model": "haiku",
+    "context_sections": [
+      "hot_paths",
+      "data_flows",
+      "storage",
+      "api_surface"
+    ]
+  },
+  {
+    "name": "security",
+    "when_to_pick": "Artifact touches authentication, authorization, user input, secrets/credentials, cryptography, external data ingestion, PII, network boundaries, or third-party API calls.",
+    "tags": [
+      "auth",
+      "input-validation",
+      "crypto",
+      "secrets",
+      "authz",
+      "pii",
+      "network"
+    ],
+    "skip_when": "Purely internal UI copy, developer-only tooling with no user input, local scripts with hardcoded inputs, documentation changes.",
+    "model": "opus",
+    "context_sections": [
+      "auth",
+      "data_flows",
+      "api_surface",
+      "external_deps",
+      "storage"
+    ]
+  }
+]

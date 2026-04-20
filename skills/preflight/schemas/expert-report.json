@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kirill/preflight/schemas/expert-report.json",
+  "title": "ExpertReport",
+  "description": "Single expert's output from a preflight panel review. Every role must emit this exact shape.",
+  "type": "object",
+  "required": ["role", "verdict", "must_fix", "should_fix", "nice_fix", "out_of_scope"],
+  "additionalProperties": false,
+  "properties": {
+    "role": {
+      "type": "string",
+      "description": "Role name matching roles/<name>.md frontmatter, or an ad-hoc name proposed by Selector.",
+      "minLength": 1
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["APPROVE", "REVISE", "REJECT"]
+    },
+    "must_fix":   { "type": "array", "items": { "$ref": "#/definitions/finding" } },
+    "should_fix": { "type": "array", "items": { "$ref": "#/definitions/finding" } },
+    "nice_fix":   { "type": "array", "items": { "$ref": "#/definitions/finding" } },
+    "out_of_scope": {
+      "type": "array",
+      "description": "Topics the role explicitly recognized but deferred to another role. Synthesizer consumes this for cross-confirmation weighting and untouched-concerns tracking.",
+      "items": {
+        "type": "object",
+        "required": ["topic", "owner_role"],
+        "additionalProperties": false,
+        "properties": {
+          "topic": { "type": "string", "minLength": 1 },
+          "owner_role": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "required": ["title", "evidence", "replacement"],
+      "additionalProperties": false,
+      "properties": {
+        "title":       { "type": "string", "minLength": 1, "maxLength": 200 },
+        "evidence":    { "type": "string", "minLength": 1, "description": "Cite artifact line/section OR a concrete scenario. No 'might be' hedging." },
+        "replacement": { "type": "string", "minLength": 1, "description": "Concrete fix, not 'consider X'." }
+      }
+    }
+  }
+}
