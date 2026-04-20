@@ -3,7 +3,7 @@ name: cost-infra
 when_to_pick: "Artifact introduces a new cloud resource, changes a data pipeline volume, adds LLM/AI API calls, changes storage strategy, or makes architectural choices with significant cost implications at scale."
 tags: [cost, cloud, infra, scaling, llm-cost, storage-cost, data-volume]
 skip_when: "Pure business logic change with no new cloud resources or volume changes. Documentation-only. Local dev tooling."
-model: haiku
+model: sonnet
 context_sections: [conventions, architecture, external_deps, data_flows, storage]
 ---
 

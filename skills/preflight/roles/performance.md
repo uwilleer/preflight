@@ -3,7 +3,7 @@ name: performance
 when_to_pick: "Artifact mentions latency, throughput, scale targets, hot paths, database queries, caching, or changes to code that runs per-request/per-event in high volume."
 tags: [latency, throughput, hot-path, caching, db-queries, algorithmic-complexity]
 skip_when: "One-off scripts, admin tools run rarely, pure UI text, documentation, low-traffic internal endpoints with no latency SLO."
-model: haiku
+model: sonnet
 context_sections: [hot_paths, data_flows, storage, api_surface]
 ---
 

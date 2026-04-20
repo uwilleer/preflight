@@ -3,7 +3,7 @@ name: testing
 when_to_pick: "Artifact introduces new logic, edge cases, external integrations, async flows, or changes to existing behavior — i.e. anything that needs to be verified to not regress."
 tags: [testing, coverage, edge-cases, regression, contracts, integration]
 skip_when: "Pure infrastructure change (DNS, cloud sizing) with no new logic. Documentation-only change."
-model: haiku
+model: sonnet
 context_sections: [conventions, architecture, api_surface, data_flows, external_deps]
 ---
 

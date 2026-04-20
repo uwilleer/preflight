@@ -3,7 +3,7 @@ name: concurrency
 when_to_pick: "Artifact involves shared state, parallel operations, async/await, background jobs, queues, caches updated by multiple writers, or any 'at the same time' scenario."
 tags: [concurrency, race-conditions, deadlock, async, atomicity, queues, locking]
 skip_when: "Single-threaded synchronous script with no shared state, pure read-only operations, documentation-only change."
-model: haiku
+model: sonnet
 context_sections: [conventions, architecture, data_flows, hot_paths, storage]
 ---
 

@@ -3,7 +3,7 @@ name: supply-chain
 when_to_pick: "Artifact adds a new dependency, upgrades a major version, introduces a new build tool or package registry, or integrates a third-party SDK/service."
 tags: [dependencies, supply-chain, licenses, packages, build, sbom, third-party]
 skip_when: "No new external dependencies added or changed. Pure internal code change. Documentation-only."
-model: haiku
+model: sonnet
 context_sections: [conventions, architecture, external_deps]
 ---
 

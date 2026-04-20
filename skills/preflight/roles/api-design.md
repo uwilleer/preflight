@@ -3,7 +3,7 @@ name: api-design
 when_to_pick: "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands that callers depend on."
 tags: [api, rest, rpc, versioning, contracts, ergonomics, breaking-changes]
 skip_when: "Internal implementation detail with no external interface. Pure DB migration with no API surface change. Documentation-only."
-model: haiku
+model: sonnet
 context_sections: [conventions, architecture, api_surface, external_deps]
 ---
 

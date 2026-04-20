@@ -12,7 +12,7 @@
       "breaking-changes"
     ],
     "skip_when": "Internal implementation detail with no external interface. Pure DB migration with no API surface change. Documentation-only.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -33,7 +33,7 @@
       "locking"
     ],
     "skip_when": "Single-threaded synchronous script with no shared state, pure read-only operations, documentation-only change.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -72,7 +72,7 @@
       "data-volume"
     ],
     "skip_when": "Pure business logic change with no new cloud resources or volume changes. Documentation-only. Local dev tooling.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -93,7 +93,7 @@
       "storage"
     ],
     "skip_when": "No schema or storage change. Pure in-memory computation with no persistence. Documentation-only.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -115,7 +115,7 @@
       "on-call"
     ],
     "skip_when": "Pure local dev tooling with no production surface. Documentation-only. Pure frontend UI change.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -135,7 +135,7 @@
       "algorithmic-complexity"
     ],
     "skip_when": "One-off scripts, admin tools run rarely, pure UI text, documentation, low-traffic internal endpoints with no latency SLO.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "hot_paths",
       "data_flows",
@@ -178,7 +178,7 @@
       "third-party"
     ],
     "skip_when": "No new external dependencies added or changed. Pure internal code change. Documentation-only.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -197,7 +197,7 @@
       "integration"
     ],
     "skip_when": "Pure infrastructure change (DNS, cloud sizing) with no new logic. Documentation-only change.",
-    "model": "haiku",
+    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",

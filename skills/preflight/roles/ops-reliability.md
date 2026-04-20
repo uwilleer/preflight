@@ -3,7 +3,7 @@ name: ops-reliability
 when_to_pick: "Artifact introduces a new service, background job, scheduled task, external dependency, or changes deployment/config — anything that will run in production and can fail."
 tags: [reliability, observability, deployment, config, failover, slos, on-call]
 skip_when: "Pure local dev tooling with no production surface. Documentation-only. Pure frontend UI change."
-model: haiku
+model: sonnet
 context_sections: [conventions, architecture, external_deps, data_flows]
 ---
 

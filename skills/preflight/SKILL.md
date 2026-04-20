@@ -72,8 +72,9 @@ Launch N `Agent` calls **in a single message** (parallel). Each gets:
 - its domain slice of `context_pack` (only sections matching role's `context_sections`)
 
 Model policy:
-- Default: `haiku`
+- Default: `sonnet`
 - Opus opt-in for roles flagged `model: opus` in frontmatter — currently `security` and `contrarian-strategist`.
+- Haiku only for truly trivial subtasks (simple index lookups, short formatting). Never for expert reviews or synthesis.
 
 Each expert returns an `ExpertReport` JSON matching `schemas/expert-report.json`.
 
