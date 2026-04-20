@@ -1,5 +1,48 @@
 [
   {
+    "name": "api-design",
+    "when_to_pick": "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands that callers depend on.",
+    "tags": [
+      "api",
+      "rest",
+      "rpc",
+      "versioning",
+      "contracts",
+      "ergonomics",
+      "breaking-changes"
+    ],
+    "skip_when": "Internal implementation detail with no external interface. Pure DB migration with no API surface change. Documentation-only.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "api_surface",
+      "external_deps"
+    ]
+  },
+  {
+    "name": "concurrency",
+    "when_to_pick": "Artifact involves shared state, parallel operations, async/await, background jobs, queues, caches updated by multiple writers, or any 'at the same time' scenario.",
+    "tags": [
+      "concurrency",
+      "race-conditions",
+      "deadlock",
+      "async",
+      "atomicity",
+      "queues",
+      "locking"
+    ],
+    "skip_when": "Single-threaded synchronous script with no shared state, pure read-only operations, documentation-only change.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "data_flows",
+      "hot_paths",
+      "storage"
+    ]
+  },
+  {
     "name": "contrarian-strategist",
     "when_to_pick": "Artifact commits to a specific architecture, library, methodology, or approach that could plausibly be done differently. Useful when the user wants the framing challenged, not just the details.",
     "tags": [
@@ -14,6 +57,70 @@
     "context_sections": [
       "api_surface",
       "external_deps"
+    ]
+  },
+  {
+    "name": "cost-infra",
+    "when_to_pick": "Artifact introduces a new cloud resource, changes a data pipeline volume, adds LLM/AI API calls, changes storage strategy, or makes architectural choices with significant cost implications at scale.",
+    "tags": [
+      "cost",
+      "cloud",
+      "infra",
+      "scaling",
+      "llm-cost",
+      "storage-cost",
+      "data-volume"
+    ],
+    "skip_when": "Pure business logic change with no new cloud resources or volume changes. Documentation-only. Local dev tooling.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "external_deps",
+      "data_flows",
+      "storage"
+    ]
+  },
+  {
+    "name": "data-model",
+    "when_to_pick": "Artifact introduces or changes a database schema, data structure, storage format, or domain model that will outlive the current release.",
+    "tags": [
+      "schema",
+      "normalization",
+      "migrations",
+      "data-integrity",
+      "domain-model",
+      "storage"
+    ],
+    "skip_when": "No schema or storage change. Pure in-memory computation with no persistence. Documentation-only.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "storage",
+      "data_flows",
+      "api_surface"
+    ]
+  },
+  {
+    "name": "ops-reliability",
+    "when_to_pick": "Artifact introduces a new service, background job, scheduled task, external dependency, or changes deployment/config — anything that will run in production and can fail.",
+    "tags": [
+      "reliability",
+      "observability",
+      "deployment",
+      "config",
+      "failover",
+      "slos",
+      "on-call"
+    ],
+    "skip_when": "Pure local dev tooling with no production surface. Documentation-only. Pure frontend UI change.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "external_deps",
+      "data_flows"
     ]
   },
   {
@@ -56,6 +163,47 @@
       "api_surface",
       "external_deps",
       "storage"
+    ]
+  },
+  {
+    "name": "supply-chain",
+    "when_to_pick": "Artifact adds a new dependency, upgrades a major version, introduces a new build tool or package registry, or integrates a third-party SDK/service.",
+    "tags": [
+      "dependencies",
+      "supply-chain",
+      "licenses",
+      "packages",
+      "build",
+      "sbom",
+      "third-party"
+    ],
+    "skip_when": "No new external dependencies added or changed. Pure internal code change. Documentation-only.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "external_deps"
+    ]
+  },
+  {
+    "name": "testing",
+    "when_to_pick": "Artifact introduces new logic, edge cases, external integrations, async flows, or changes to existing behavior — i.e. anything that needs to be verified to not regress.",
+    "tags": [
+      "testing",
+      "coverage",
+      "edge-cases",
+      "regression",
+      "contracts",
+      "integration"
+    ],
+    "skip_when": "Pure infrastructure change (DNS, cloud sizing) with no new logic. Documentation-only change.",
+    "model": "haiku",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "api_surface",
+      "data_flows",
+      "external_deps"
     ]
   }
 ]

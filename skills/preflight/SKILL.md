@@ -36,9 +36,15 @@ Heuristic: does this artifact make claims about existing code?
 State your decision in one line.
 
 ### 4. Context pack (if decided in step 3)
-Build a **sectioned** `context_pack` ≤10k tokens. Sections are tagged by domain: `auth`, `hot_paths`, `data_flows`, `api_surface`, `storage`, `external_deps`, etc. Each expert later pulls only the sections listed in its `context_sections` frontmatter.
+Build a **sectioned** `context_pack` ≤10k tokens. Always include these two sections first, then add domain-specific ones:
 
-For code-heavy targets, delegate this to `researcher` skill if available. Otherwise do it yourself with Glob+Grep+Read, hypothesis-first.
+- **`conventions`** — project coding conventions, architectural decisions, stack constraints. Sources: `CLAUDE.md`, `docs/ARCHITECTURE.md`, `README.md` (tech stack section), `ADR/` directory if exists. This section is sent to ALL experts regardless of their `context_sections`.
+- **`architecture`** — high-level system diagram, service boundaries, existing patterns (e.g. "we use CQRS here", "all DB access via repository layer"). Sources: architecture docs, existing module structure (Glob `src/**`).
+- **Domain sections** (role-specific): `auth`, `hot_paths`, `data_flows`, `api_surface`, `storage`, `external_deps`, etc.
+
+For code-heavy targets, delegate to `researcher` skill if available. Otherwise: Glob+Grep+Read, hypothesis-first.
+
+**Why conventions matter:** an expert proposing a pattern that contradicts existing project conventions creates a useless finding. For example, if the project uses SQLAlchemy's repository pattern everywhere, an expert suggesting raw psycopg2 is ignoring context. Send `conventions` so experts can flag conflicts with, or violations of, established patterns — not generic best practices.
 
 ### 5. Selector
 Invoke the `selector` meta-agent (see `meta-agents/selector.md`). Inputs: `brief`, `roles/index.json`, optional `context_pack` summary. Output: `roster.json` with `chosen` (3-5 roles) and `dropped` (with reasons).
@@ -62,7 +68,8 @@ Default in MVP is **gate ON** (visible-default). Wait for user confirmation. On 
 Launch N `Agent` calls **in a single message** (parallel). Each gets:
 - `brief`
 - its role prompt from `roles/<name>.md` (or ad-hoc prompt for domain-specific roles)
-- its slice of `context_pack` (only sections matching role's `context_sections`)
+- **`conventions` + `architecture`** sections from context_pack (always, for every expert)
+- its domain slice of `context_pack` (only sections matching role's `context_sections`)
 
 Model policy:
 - Default: `haiku`
