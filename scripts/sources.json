@@ -1,0 +1,23 @@
+{
+  "roles": {
+    "security": {
+      "source": "https://raw.githubusercontent.com/Piebald-AI/claude-code-system-prompts/main/system-prompts/agent-prompt-security-review-slash-command.md",
+      "strip_sections": ["REQUIRED OUTPUT FORMAT", "FINAL REMINDER", "START ANALYSIS"],
+      "meta": {
+        "display_name": "Security Reviewer",
+        "when_to_pick": "Artifact involves auth, user input, secrets, crypto, API endpoints, file uploads, external integrations, or any trust boundary.",
+        "tags": ["security", "auth", "injection", "crypto", "secrets", "idor", "xss", "input-validation"],
+        "skip_when": "Pure documentation, local dev tooling with no external interface, no user input, no secrets.",
+        "model": "opus",
+        "context_sections": ["conventions", "architecture", "api_surface", "external_deps"],
+        "intro": "You are a senior security engineer doing a **pre-write plan/spec review**. Your job: identify security vulnerabilities in the proposed design before any code is written. Treat the artifact as a plan — find where vulnerabilities would arise in the implementation if the plan is followed as written.",
+        "out_of_scope": [
+          {"topic": "Performance optimization", "owner_role": "performance"},
+          {"topic": "Cloud cost", "owner_role": "cost-infra"},
+          {"topic": "Test coverage gaps", "owner_role": "testing"},
+          {"topic": "Deployment reliability", "owner_role": "ops-reliability"}
+        ]
+      }
+    }
+  }
+}
