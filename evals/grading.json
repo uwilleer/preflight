@@ -121,6 +121,36 @@
         "unbounded user history in prompt — no max_tokens — runaway cost",
         "no caching despite identical query patterns"
       ]
+    },
+    "plan-swallowed-errors": {
+      "expected_verdict": "REJECT",
+      "expected_roles": ["error-handling"],
+      "must_find": [
+        {"severity": "must", "role": "error-handling", "title": "swallowed exception"},
+        {"severity": "must", "role": "error-handling", "title": "no timeout"},
+        {"severity": "must", "role": "error-handling", "title": "infinite retry"}
+      ],
+      "baseline_plan_critic_finds": ["bare except"],
+      "panel_unique_expected": [
+        "bare `except: pass` loses error context — no way to diagnose customer endpoint failures",
+        "requests.post with no timeout — one slow customer endpoint blocks the Celery worker",
+        "retry sweep has no backoff, no max attempts, no DLQ — failing events retry every 5 min forever"
+      ]
+    },
+    "plan-silent-worker": {
+      "expected_verdict": "REJECT",
+      "expected_roles": ["observability"],
+      "must_find": [
+        {"severity": "must", "role": "observability", "title": "no logging"},
+        {"severity": "must", "role": "observability", "title": "no metrics"},
+        {"severity": "must", "role": "observability", "title": "no alert"}
+      ],
+      "baseline_plan_critic_finds": [],
+      "panel_unique_expected": [
+        "nightly job emits zero logs — no way to know if it ran, succeeded, or partially failed",
+        "per-customer success/failure not tracked — can't answer 'did customer X get their report?'",
+        "no alert on job non-execution — if scheduler dies, nobody notices until customer complains"
+      ]
     }
   }
 }

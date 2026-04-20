@@ -1,6 +1,51 @@
 # Contributing
 
-## Adding a role
+## Two ways to add a role
+
+- **Synced role** (preferred): point at a well-maintained community prompt and let
+  `make sync-roles` regenerate the file. Upstream improvements land here with one
+  command. See [Adding a synced role](#adding-a-synced-role) below.
+- **Custom role**: hand-write the full prompt. Use this only when no community
+  source covers the domain well. See [Adding a custom role](#adding-a-custom-role).
+
+## Adding a synced role
+
+1. Pick a source. Good candidates:
+   - [`baz-scm/awesome-reviewers`](https://github.com/baz-scm/awesome-reviewers)
+     — short, single-rule markdown files, one per `_reviewers/*.md`.
+   - [`Piebald-AI/claude-code-system-prompts`](https://github.com/Piebald-AI/claude-code-system-prompts)
+     — full agent prompts under `system-prompts/*.md`.
+
+2. Add an entry to `scripts/sources.json`:
+
+   ```json
+   "your-role": {
+     "source": "https://raw.githubusercontent.com/<org>/<repo>/main/path/to/prompt.md",
+     "strip_sections": ["REQUIRED OUTPUT FORMAT", "FINAL REMINDER"],
+     "meta": {
+       "display_name": "Your Role Reviewer",
+       "when_to_pick": "One sentence: what artifact properties trigger this role.",
+       "tags": ["tag1", "tag2"],
+       "skip_when": "One sentence: when this role adds no value.",
+       "model": "sonnet",
+       "context_sections": ["conventions", "architecture"],
+       "intro": "You are a <role> doing a pre-write plan/spec review. Your job: …",
+       "out_of_scope": [
+         {"topic": "Adjacent concern", "owner_role": "other-role"}
+       ]
+     }
+   }
+   ```
+
+   Use `"sources": [url1, url2]` (array) to merge multiple upstream files.
+   `strip_sections` removes noisy ALL-CAPS section headers (`REQUIRED OUTPUT FORMAT:`,
+   `START ANALYSIS:`, etc.) — list only sections that conflict with our wrapper.
+
+3. Run `make sync-roles ROLE=your-role && make test-index`. Verify the generated
+   file has: injection-defense block, domain expertise body, `ExpertReport` JSON
+   schema at the end, no git-specific content.
+
+## Adding a custom role
 
 One PR = one file: `skills/preflight/roles/<name>.md`
 

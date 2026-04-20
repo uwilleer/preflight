@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.2.0] — 2026-04-21
+
+### Added
+- **Community-prompt sync mechanism:**
+  - `scripts/sync_roles.py` — fetches upstream community prompts, strips git-specific
+    blocks and noisy output-format sections, wraps with preflight's `ExpertReport`
+    schema + injection-defense block, writes to `skills/preflight/roles/<role>.md`.
+  - `scripts/sources.json` — single source of truth for which upstream URL feeds each
+    role. Supports `source` (single URL) or `sources` (array of URLs merged into one
+    body with `---` separators).
+  - `make sync-roles` / `make sync-roles ROLE=<name>` — one-shot or per-role sync;
+    auto-rebuilds `roles/index.json` after sync.
+- **7 roles migrated to community sources:**
+  - `security` → Piebald-AI/claude-code-system-prompts (9k ⭐)
+  - `performance`, `testing`, `concurrency`, `api-design`, `data-model`,
+    `supply-chain` → baz-scm/awesome-reviewers
+- **2 new roles from baz-scm/awesome-reviewers** (total: 12):
+  - `error-handling` — plans that skip failure-mode analysis (unhandled exceptions,
+    swallowed errors, missing resource cleanup, infinite retry).
+  - `observability` — plans that skip logging, metrics, and tracing strategy.
+- **2 new eval fixtures:**
+  - `plan-swallowed-errors/` — `except: pass`, no timeout, retry-forever pattern.
+  - `plan-silent-worker/` — nightly job with zero logs / metrics / alerts.
+  - Grading entries added to `evals/grading.json` — requires new
+    `evals-grading-v2` tag before next scoring run.
+
+### Changed
+- 3 roles remain custom (no good community source):
+  `ops-reliability`, `cost-infra`, `contrarian-strategist`.
+- Normalized injection-defense wording across all roles to the canonical 4-line form.
+- `CONTRIBUTING.md` — added "Adding a synced role" section.
+
 ## [0.1.0] — 2026-04-21
 
 ### Added
