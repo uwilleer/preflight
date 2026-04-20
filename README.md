@@ -10,27 +10,28 @@ One agent = one clearly-scoped role. The skill dynamically assembles a panel of 
 
 Unlike a single contrarian reviewer (`plan-critic`) or undifferentiated parallel dispatch (`dispatching-parallel-agents`), `preflight` is a **multi-perspective pre-write review** — targeted at catching bugs, blind spots, and bad decisions *before* they're encoded in a commit.
 
-## Pipeline (10 steps)
+## Pipeline (9 steps)
 
 ```
-Ingest → Brief → Context decide → [Context pack]
+Ingest → Brief → Context decide → [Context pack, sectioned by role tags]
    ↓
-Roster-gen (wide)  →  Pruner (cap 8)  →  [Human gate]
+Selector (chosen 3-5 + dropped)   →  [Human gate — visible default in MVP]
    ↓
-Parallel dispatch (N experts)
+Parallel dispatch (N experts; Haiku by default, Opus for security/contrarian)
    ↓
-Synthesizer (dedupe + severity + conflicts)
+Synthesizer (dedupe + severity + conflicts + out_of_scope cross-confirmation)
    ↓
 Report (APPROVE / REVISE / REJECT + actionable list)
 ```
 
 ## Status
 
-- [x] Design spec — `docs/specs/2026-04-20-preflight-design.md`
-- [ ] Meta-agents (`roster-gen`, `pruner`, `synthesizer`)
-- [ ] Base role catalog (10 roles)
-- [ ] First live run on a buggy-plan fixture
-- [ ] Evals suite vs `plan-critic` baseline
+- [x] Design spec v1 — `docs/specs/2026-04-20-preflight-design.md`
+- [x] Independent `plan-critic` pass → REVISE → spec v2 iterated
+- [ ] Meta-agents (`selector`, `synthesizer`)
+- [ ] Base role catalog (10 roles, with prompt-injection defense)
+- [ ] First live run on a buggy-plan fixture + injection fixture
+- [ ] Evals suite vs `plan-critic` baseline (grading.json frozen by git tag)
 - [ ] Open-source release (v0.1.0)
 
 ## Design
