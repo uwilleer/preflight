@@ -107,6 +107,52 @@
     "synced_at": "2026-04-21"
   },
   {
+    "name": "error-handling",
+    "when_to_pick": "Artifact describes operations that can fail — external calls, IO, DB queries, async jobs, user input processing — and doesn't specify how errors are handled.",
+    "tags": [
+      "error-handling",
+      "exceptions",
+      "resilience",
+      "async",
+      "failure-modes",
+      "resource-cleanup"
+    ],
+    "skip_when": "Pure happy-path feature with no external dependencies, documentation-only, or the artifact already has a detailed error strategy.",
+    "model": "sonnet",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "data_flows"
+    ],
+    "synced_from": [
+      "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/aider-handle-errors-gracefully.md",
+      "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ai-async-error-callbacks.md"
+    ],
+    "synced_at": "2026-04-21"
+  },
+  {
+    "name": "observability",
+    "when_to_pick": "Artifact describes a new service, background job, data pipeline, or feature with non-trivial state changes where logging and monitoring are not addressed.",
+    "tags": [
+      "observability",
+      "logging",
+      "metrics",
+      "tracing",
+      "monitoring",
+      "debugging",
+      "structured-logs"
+    ],
+    "skip_when": "Pure UI-only change with no server-side logic, documentation, or the artifact already specifies a detailed logging/metrics plan.",
+    "model": "sonnet",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "data_flows"
+    ],
+    "synced_from": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/airflow-context-rich-log-messages.md",
+    "synced_at": "2026-04-21"
+  },
+  {
     "name": "ops-reliability",
     "when_to_pick": "Artifact introduces a new service, background job, scheduled task, external dependency, or changes deployment/config — anything that will run in production and can fail.",
     "tags": [

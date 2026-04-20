@@ -131,6 +131,45 @@
           {"topic": "Cloud infrastructure cost", "owner_role": "cost-infra"}
         ]
       }
+    },
+    "error-handling": {
+      "sources": [
+        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/aider-handle-errors-gracefully.md",
+        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ai-async-error-callbacks.md"
+      ],
+      "meta": {
+        "display_name": "Error Handling Reviewer",
+        "when_to_pick": "Artifact describes operations that can fail — external calls, IO, DB queries, async jobs, user input processing — and doesn't specify how errors are handled.",
+        "tags": ["error-handling", "exceptions", "resilience", "async", "failure-modes", "resource-cleanup"],
+        "skip_when": "Pure happy-path feature with no external dependencies, documentation-only, or the artifact already has a detailed error strategy.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "data_flows"],
+        "intro": "You are an error handling reviewer doing a **pre-write plan/spec review**. Your job: identify missing error handling strategy — unhandled failure modes, swallowed exceptions, silent failures in async paths, missing resource cleanup on error.",
+        "out_of_scope": [
+          {"topic": "Security vulnerabilities", "owner_role": "security"},
+          {"topic": "Performance bottlenecks", "owner_role": "performance"},
+          {"topic": "Test coverage", "owner_role": "testing"},
+          {"topic": "Concurrency and race conditions", "owner_role": "concurrency"}
+        ]
+      }
+    },
+    "observability": {
+      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/airflow-context-rich-log-messages.md",
+      "meta": {
+        "display_name": "Observability Reviewer",
+        "when_to_pick": "Artifact describes a new service, background job, data pipeline, or feature with non-trivial state changes where logging and monitoring are not addressed.",
+        "tags": ["observability", "logging", "metrics", "tracing", "monitoring", "debugging", "structured-logs"],
+        "skip_when": "Pure UI-only change with no server-side logic, documentation, or the artifact already specifies a detailed logging/metrics plan.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "data_flows"],
+        "intro": "You are an observability reviewer doing a **pre-write plan/spec review**. Your job: identify gaps in logging, metrics, and tracing strategy — missing context in logs, unmonitored failure paths, no alerting on critical events.",
+        "out_of_scope": [
+          {"topic": "Security vulnerabilities in logs (PII/secrets)", "owner_role": "security"},
+          {"topic": "Performance of logging infrastructure", "owner_role": "performance"},
+          {"topic": "Test coverage for log output", "owner_role": "testing"},
+          {"topic": "Cloud cost of log storage", "owner_role": "cost-infra"}
+        ]
+      }
     }
   }
 }
