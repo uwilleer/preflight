@@ -18,6 +18,119 @@
           {"topic": "Deployment reliability", "owner_role": "ops-reliability"}
         ]
       }
+    },
+    "performance": {
+      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/checkov-choose-optimal-algorithms.md",
+      "meta": {
+        "display_name": "Performance Reviewer",
+        "when_to_pick": "Artifact describes data processing, queries, loops, caching, or any operation with non-trivial input size.",
+        "tags": ["performance", "algorithms", "complexity", "n+1", "memory", "caching"],
+        "skip_when": "Pure config change, documentation, or UI-only with no data logic.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "data_flows"],
+        "intro": "You are a performance engineer doing a **pre-write plan/spec review**. Your job: identify algorithmic inefficiencies, N+1 patterns, unnecessary allocations, and suboptimal data structures in the proposed design before any code is written.",
+        "out_of_scope": [
+          {"topic": "Security vulnerabilities", "owner_role": "security"},
+          {"topic": "Test coverage", "owner_role": "testing"},
+          {"topic": "Cloud billing cost", "owner_role": "cost-infra"},
+          {"topic": "Deployment reliability", "owner_role": "ops-reliability"}
+        ]
+      }
+    },
+    "testing": {
+      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/angular-comprehensive-test-coverage.md",
+      "meta": {
+        "display_name": "Testing Reviewer",
+        "when_to_pick": "Artifact describes new functionality, a bug fix, or a refactor where test strategy is not specified.",
+        "tags": ["testing", "coverage", "edge-cases", "test-strategy", "mocking", "fixtures"],
+        "skip_when": "Pure infrastructure change, documentation, or the artifact already has a detailed test plan.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture"],
+        "intro": "You are a test engineer doing a **pre-write plan/spec review**. Your job: identify gaps in the proposed test strategy — missing edge cases, untested failure paths, flaky test risks — before any code is written.",
+        "out_of_scope": [
+          {"topic": "Security vulnerabilities", "owner_role": "security"},
+          {"topic": "Performance bottlenecks", "owner_role": "performance"},
+          {"topic": "API contract correctness", "owner_role": "api-design"},
+          {"topic": "Deployment reliability", "owner_role": "ops-reliability"}
+        ]
+      }
+    },
+    "concurrency": {
+      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/aider-thread-safe-message-dispatching.md",
+      "meta": {
+        "display_name": "Concurrency Reviewer",
+        "when_to_pick": "Artifact involves async code, background jobs, shared state, queues, locks, or any multi-threaded/multi-process design.",
+        "tags": ["concurrency", "race-conditions", "deadlocks", "async", "thread-safety", "locks"],
+        "skip_when": "Single-threaded synchronous code with no shared state, pure UI change, documentation.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "data_flows"],
+        "intro": "You are a concurrency engineer doing a **pre-write plan/spec review**. Your job: identify race conditions, deadlocks, missing synchronization, and unsafe shared-state access in the proposed design before any code is written.",
+        "out_of_scope": [
+          {"topic": "Security vulnerabilities", "owner_role": "security"},
+          {"topic": "Algorithm efficiency", "owner_role": "performance"},
+          {"topic": "Database schema", "owner_role": "data-model"},
+          {"topic": "Deployment reliability", "owner_role": "ops-reliability"}
+        ]
+      }
+    },
+    "api-design": {
+      "source": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ant-design-api-evolution-strategy.md",
+      "meta": {
+        "display_name": "API Design Reviewer",
+        "when_to_pick": "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands.",
+        "tags": ["api", "rest", "rpc", "versioning", "breaking-changes", "contracts", "ergonomics"],
+        "skip_when": "Pure internal implementation with no external interface. DB migration with no API surface change. Documentation-only.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "api_surface"],
+        "intro": "You are an API design reviewer doing a **pre-write plan/spec review**. Your job: catch contract mistakes, breaking changes, ergonomic problems, and versioning oversights before they become load-bearing.",
+        "out_of_scope": [
+          {"topic": "Security (auth, injection)", "owner_role": "security"},
+          {"topic": "Performance (latency, algorithms)", "owner_role": "performance"},
+          {"topic": "Database schema internals", "owner_role": "data-model"},
+          {"topic": "Test coverage", "owner_role": "testing"}
+        ]
+      }
+    },
+    "data-model": {
+      "sources": [
+        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/appwrite-ensure-database-transactional-integrity.md",
+        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/appwrite-comprehensive-migration-planning.md"
+      ],
+      "meta": {
+        "display_name": "Data Model Reviewer",
+        "when_to_pick": "Artifact introduces or changes a database schema, data structure, storage format, or domain model that will outlive the current release.",
+        "tags": ["schema", "normalization", "migrations", "data-integrity", "domain-model", "indexes"],
+        "skip_when": "No schema or storage change. Pure in-memory computation with no persistence. Documentation-only.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "storage", "data_flows"],
+        "intro": "You are a data model reviewer doing a **pre-write plan/spec review**. Your job: catch schema mistakes, missing constraints, integrity gaps, and migration risks before they become the permanent shape of the database.",
+        "out_of_scope": [
+          {"topic": "Query performance optimization", "owner_role": "performance"},
+          {"topic": "API shape and field naming", "owner_role": "api-design"},
+          {"topic": "Security (access control to tables)", "owner_role": "security"},
+          {"topic": "Concurrency (locking, transaction isolation)", "owner_role": "concurrency"}
+        ]
+      }
+    },
+    "supply-chain": {
+      "sources": [
+        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/awesome-go-vet-dependency-supply-chains.md",
+        "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ant-design-pin-ci-dependencies-securely.md"
+      ],
+      "meta": {
+        "display_name": "Supply Chain Reviewer",
+        "when_to_pick": "Artifact adds a new dependency, upgrades a major version, introduces a new build tool or package registry, or integrates a third-party SDK/service.",
+        "tags": ["dependencies", "supply-chain", "licenses", "packages", "build", "third-party"],
+        "skip_when": "No new external dependencies added or changed. Pure internal code change. Documentation-only.",
+        "model": "sonnet",
+        "context_sections": ["conventions", "architecture", "external_deps"],
+        "intro": "You are a supply chain security reviewer doing a **pre-write plan/spec review**. Your job: catch risky dependencies, license conflicts, and build pipeline vulnerabilities before they enter the codebase.",
+        "out_of_scope": [
+          {"topic": "Application security vulnerabilities", "owner_role": "security"},
+          {"topic": "Performance of dependencies", "owner_role": "performance"},
+          {"topic": "Cloud infrastructure cost", "owner_role": "cost-infra"}
+        ]
+      }
     }
   }
 }

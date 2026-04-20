@@ -1,46 +1,46 @@
 [
   {
     "name": "api-design",
-    "when_to_pick": "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands that callers depend on.",
+    "when_to_pick": "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands.",
     "tags": [
       "api",
       "rest",
       "rpc",
       "versioning",
+      "breaking-changes",
       "contracts",
-      "ergonomics",
-      "breaking-changes"
+      "ergonomics"
     ],
-    "skip_when": "Internal implementation detail with no external interface. Pure DB migration with no API surface change. Documentation-only.",
+    "skip_when": "Pure internal implementation with no external interface. DB migration with no API surface change. Documentation-only.",
     "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
-      "api_surface",
-      "external_deps"
-    ]
+      "api_surface"
+    ],
+    "synced_from": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ant-design-api-evolution-strategy.md",
+    "synced_at": "2026-04-21"
   },
   {
     "name": "concurrency",
-    "when_to_pick": "Artifact involves shared state, parallel operations, async/await, background jobs, queues, caches updated by multiple writers, or any 'at the same time' scenario.",
+    "when_to_pick": "Artifact involves async code, background jobs, shared state, queues, locks, or any multi-threaded/multi-process design.",
     "tags": [
       "concurrency",
       "race-conditions",
-      "deadlock",
+      "deadlocks",
       "async",
-      "atomicity",
-      "queues",
-      "locking"
+      "thread-safety",
+      "locks"
     ],
-    "skip_when": "Single-threaded synchronous script with no shared state, pure read-only operations, documentation-only change.",
+    "skip_when": "Single-threaded synchronous code with no shared state, pure UI change, documentation.",
     "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
-      "data_flows",
-      "hot_paths",
-      "storage"
-    ]
+      "data_flows"
+    ],
+    "synced_from": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/aider-thread-safe-message-dispatching.md",
+    "synced_at": "2026-04-21"
   },
   {
     "name": "contrarian-strategist",
@@ -90,7 +90,7 @@
       "migrations",
       "data-integrity",
       "domain-model",
-      "storage"
+      "indexes"
     ],
     "skip_when": "No schema or storage change. Pure in-memory computation with no persistence. Documentation-only.",
     "model": "sonnet",
@@ -98,9 +98,13 @@
       "conventions",
       "architecture",
       "storage",
-      "data_flows",
-      "api_surface"
-    ]
+      "data_flows"
+    ],
+    "synced_from": [
+      "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/appwrite-ensure-database-transactional-integrity.md",
+      "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/appwrite-comprehensive-migration-planning.md"
+    ],
+    "synced_at": "2026-04-21"
   },
   {
     "name": "ops-reliability",
@@ -125,45 +129,48 @@
   },
   {
     "name": "performance",
-    "when_to_pick": "Artifact mentions latency, throughput, scale targets, hot paths, database queries, caching, or changes to code that runs per-request/per-event in high volume.",
+    "when_to_pick": "Artifact describes data processing, queries, loops, caching, or any operation with non-trivial input size.",
     "tags": [
-      "latency",
-      "throughput",
-      "hot-path",
-      "caching",
-      "db-queries",
-      "algorithmic-complexity"
+      "performance",
+      "algorithms",
+      "complexity",
+      "n+1",
+      "memory",
+      "caching"
     ],
-    "skip_when": "One-off scripts, admin tools run rarely, pure UI text, documentation, low-traffic internal endpoints with no latency SLO.",
+    "skip_when": "Pure config change, documentation, or UI-only with no data logic.",
     "model": "sonnet",
     "context_sections": [
-      "hot_paths",
-      "data_flows",
-      "storage",
-      "api_surface"
-    ]
+      "conventions",
+      "architecture",
+      "data_flows"
+    ],
+    "synced_from": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/checkov-choose-optimal-algorithms.md",
+    "synced_at": "2026-04-21"
   },
   {
     "name": "security",
-    "when_to_pick": "Artifact touches authentication, authorization, user input, secrets/credentials, cryptography, external data ingestion, PII, network boundaries, or third-party API calls.",
+    "when_to_pick": "Artifact involves auth, user input, secrets, crypto, API endpoints, file uploads, external integrations, or any trust boundary.",
     "tags": [
+      "security",
       "auth",
-      "input-validation",
+      "injection",
       "crypto",
       "secrets",
-      "authz",
-      "pii",
-      "network"
+      "idor",
+      "xss",
+      "input-validation"
     ],
-    "skip_when": "Purely internal UI copy, developer-only tooling with no user input, local scripts with hardcoded inputs, documentation changes.",
+    "skip_when": "Pure documentation, local dev tooling with no external interface, no user input, no secrets.",
     "model": "opus",
     "context_sections": [
-      "auth",
-      "data_flows",
+      "conventions",
+      "architecture",
       "api_surface",
-      "external_deps",
-      "storage"
-    ]
+      "external_deps"
+    ],
+    "synced_from": "https://raw.githubusercontent.com/Piebald-AI/claude-code-system-prompts/main/system-prompts/agent-prompt-security-review-slash-command.md",
+    "synced_at": "2026-04-21"
   },
   {
     "name": "supply-chain",
@@ -174,7 +181,6 @@
       "licenses",
       "packages",
       "build",
-      "sbom",
       "third-party"
     ],
     "skip_when": "No new external dependencies added or changed. Pure internal code change. Documentation-only.",
@@ -183,27 +189,31 @@
       "conventions",
       "architecture",
       "external_deps"
-    ]
+    ],
+    "synced_from": [
+      "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/awesome-go-vet-dependency-supply-chains.md",
+      "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ant-design-pin-ci-dependencies-securely.md"
+    ],
+    "synced_at": "2026-04-21"
   },
   {
     "name": "testing",
-    "when_to_pick": "Artifact introduces new logic, edge cases, external integrations, async flows, or changes to existing behavior — i.e. anything that needs to be verified to not regress.",
+    "when_to_pick": "Artifact describes new functionality, a bug fix, or a refactor where test strategy is not specified.",
     "tags": [
       "testing",
       "coverage",
       "edge-cases",
-      "regression",
-      "contracts",
-      "integration"
+      "test-strategy",
+      "mocking",
+      "fixtures"
     ],
-    "skip_when": "Pure infrastructure change (DNS, cloud sizing) with no new logic. Documentation-only change.",
+    "skip_when": "Pure infrastructure change, documentation, or the artifact already has a detailed test plan.",
     "model": "sonnet",
     "context_sections": [
       "conventions",
-      "architecture",
-      "api_surface",
-      "data_flows",
-      "external_deps"
-    ]
+      "architecture"
+    ],
+    "synced_from": "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/angular-comprehensive-test-coverage.md",
+    "synced_at": "2026-04-21"
   }
 ]

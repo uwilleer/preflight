@@ -112,8 +112,9 @@ def build_role_file(role_name: str, meta: dict, body: str) -> str:
     tags = json.dumps(meta["tags"])
     context_sections = json.dumps(meta["context_sections"])
     out_of_scope_block = build_out_of_scope_block(meta["out_of_scope"])
-    out_of_scope_json = json.dumps(meta["out_of_scope"])
     today = date.today().isoformat()
+    source = meta["source"]
+    synced_from = json.dumps(source) if isinstance(source, list) else source
 
     return f"""\
 ---
@@ -123,7 +124,7 @@ tags: {tags}
 skip_when: "{meta['skip_when']}"
 model: {meta['model']}
 context_sections: {context_sections}
-synced_from: {meta['source']}
+synced_from: {synced_from}
 synced_at: {today}
 ---
 
@@ -155,21 +156,34 @@ Flag non-{role_name} concerns via `out_of_scope` with the correct `owner_role`.
 """
 
 
-def sync_role(role_name: str, config: dict) -> None:
-    source_url = config["source"]
-    meta = {**config["meta"], "source": source_url}
-
-    print(f"  fetching {source_url}")
-    raw = fetch(source_url)
-
-    strip_sections = config.get("strip_sections", [])
-
+def process_body(raw: str, strip_sections: list) -> str:
     body = strip_frontmatter(raw)
     body = strip_git_blocks(body)
     body = strip_named_sections(body, strip_sections)
     body = trim_intro_prose(body)
     body = collapse_blanks(body)
+    return body
 
+
+def sync_role(role_name: str, config: dict) -> None:
+    strip_sections = config.get("strip_sections", [])
+
+    # Support both "source" (str) and "sources" (list)
+    if "sources" in config:
+        urls = config["sources"]
+        bodies = []
+        for url in urls:
+            print(f"  fetching {url}")
+            bodies.append(process_body(fetch(url), strip_sections))
+        body = "\n\n---\n\n".join(bodies)
+        source_display = urls  # list stored in frontmatter
+    else:
+        url = config["source"]
+        print(f"  fetching {url}")
+        body = process_body(fetch(url), strip_sections)
+        source_display = url
+
+    meta = {**config["meta"], "source": source_display}
     out = build_role_file(role_name, meta, body)
     out_path = ROLES_DIR / f"{role_name}.md"
     out_path.write_text(out)
