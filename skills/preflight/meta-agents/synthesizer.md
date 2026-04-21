@@ -82,6 +82,25 @@ After filtering, **compress NICE tier**:
 
 **Empty section policy:** if `should_fix`, `nice_fix`, `decisions`, `untouched_concerns`, or `dropped` are empty after filtering, emit them as `[]` — the coordinator will hide empty sections from the user. Don't pad.
 
+### 7. Output polish (run after noise filter, before emitting JSON)
+
+Experts copy strings verbatim from the artifact into `evidence` and `replacement`. When the artifact contains URL-encoded query strings, bash-escaped snippets, or wordy problem descriptions, these flow through as-is and make the downstream report unreadable. Fix at the boundary:
+
+1. **URL-decode query snippets.** Any `%XX` sequence inside `evidence` or `replacement` → replace with the decoded character. `resolved%20date:%20Today-14d%20..%20Today` → `resolved date: Today-14d .. Today`. Exception: if the URL encoding itself is the subject of the finding (e.g., "double-encoding `%2520` in redirect_uri"), quote the encoded form once and annotate `(URL-encoded)` so the reader knows it's intentional.
+
+2. **Action-first titles.** `title` is a label for the fix, not a description of the problem. Keep it ≤ 10 words and lead with location or category, not narrative.
+
+   Rewrite wordy titles:
+   - `"Синтаксис resolved date: в Step 2 неверный — вернёт пустой список"` → `"L28 — опечатка в DSL: resolved date: → resolved:"`
+   - `"$top=50 без sprint-фильтра тихо truncate'ит и забивает список старыми тикетами"` → `"L12 — $top=50 без sprint-фильтра"`
+   - `"AI делает группировку post-hoc; плоский JSON-массив летит в контекст сырым"` → `"L17-26 — jq отдаёт плоский массив, группирует модель"`
+
+   If an expert's original title was already short and action-first, leave it alone.
+
+3. **Collapse duplicated evidence+replacement.** If the `replacement` already shows the full correct form, `evidence` doesn't need to repeat the broken form in prose — just point at it: `"L28 in Step 2 query"` instead of `"the string 'resolved date:' with a space before the colon is present at L28 of Step 2 where DSL expects 'resolved:' without space"`. One or the other carries the detail, not both.
+
+These rewrites happen in your head before you emit JSON. The output schema is unchanged; only the string contents get polished.
+
 ## Output format (strict)
 
 Return **only** this JSON:
