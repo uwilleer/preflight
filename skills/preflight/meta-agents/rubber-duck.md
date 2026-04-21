@@ -103,6 +103,64 @@ Agent names, dropped findings, confirmation attribution — all go here. The use
 - Separate evidence paragraphs when the fix itself explains the problem.
 - Decorative headings like "Эксперты:" / "Отфильтровано как шум:" in the main body — move to footer.
 
+## Worked example
+
+The single most common failure mode of this step is "duck reads the rules, nods, then outputs something that *looks like* a polished report but still has wordy titles, URL-encoded snippets, and bullet-style MUSTs". Shape-follow this example to avoid it.
+
+**INPUT (`rendered_markdown` from step 9):**
+
+```markdown
+## Preflight — `youtrack-status.md`
+
+**Вердикт:** REJECT — 6 MUST-блокеров; все тихие.
+
+### Что обязательно поправить до кода (2)
+
+- **Синтаксис `resolved date:` в Step 2 неверный — вернёт пустой список** — YouTrack DSL использует `resolved:`, а не `resolved date:` с пробелом.
+  → `curl ... "...resolved%20date:%20Today-14d%20..%20Today..."`
+  <sub>подтвердили: youtrack-api-integration</sub>
+
+- **`$top=50` без sprint-фильтра тихо truncate'ит и забивает список старыми тикетами** — YouTrack REST не возвращает сигнал truncation; без границы спринта старые тикеты вытесняют текущие.
+  → `query=project:PMNTR20%20Assignee:me%20%23Unresolved%20Sprint:%20{Sprint%2022}&$top=100`
+```
+
+**OUTPUT (your rewrite):**
+
+```markdown
+**Ревьюили:** `youtrack-status.md` — skill для статуса спринта PMNTR20 из YouTrack
+
+**Вердикт:** REJECT — 6 тихих блокеров; skill «работает», но возвращает неверные данные.
+
+### Что обязательно поправить до кода
+
+**1. L28 — опечатка в DSL**
+`resolved date:` → `resolved:` (без пробела). Иначе YouTrack не распознаёт поле, список пустой.
+
+**2. L12 — $top=50 без sprint-фильтра**
+Добавить `Sprint:{Sprint 22}` в query, поднять `$top=100`. Иначе старые тикеты из закрытых спринтов вытесняют текущие.
+```
+
+Notice what changed:
+- `%20` decoded to spaces everywhere in the body (titles, snippets, fixes).
+- Titles became `L<line> — <category>`, 5-8 words, action-first.
+- Numbered list (`**1.**, **2.**`), not bullets (`-`).
+- Empty line between items.
+- `<sub>подтвердили:</sub>` removed from main body — goes to collapsed footer.
+- Redundant evidence paragraph collapsed into the fix line.
+
+## Pre-return checklist
+
+Before returning, scan your output and fix any of these:
+
+1. **No `%\d{2}` sequences in MUST-FIX/SHOULD/NICE body.** Decode them. Exception: the finding is literally about URL encoding (rare) — then quote once with `(URL-encoded)` annotation.
+2. **MUST-FIX items numbered** (`**1.**, **2.**, **3.**`), not `-` bullets.
+3. **Titles ≤ 10 words.** If a title is a sentence ending in a period or exclamation, it's too long — rewrite.
+4. **Empty line between numbered items.** 6 MUSTs as a wall is unreadable.
+5. **No per-item `подтвердили:` / `reporters:` / `advocated_by:`** in main body. Those live in the collapsed footer.
+6. **Decision recommendation is one line,** not a paragraph. If it sprawls, compress.
+
+If any check fails, fix before emit. This is not optional — the user's 30-second read depends on it.
+
 ## Output
 
 Return the rewritten markdown. Just markdown. No JSON wrapper, no commentary before or after.
