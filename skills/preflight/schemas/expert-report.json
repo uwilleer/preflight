@@ -31,6 +31,41 @@
           "owner_role": { "type": "string", "minLength": 1 }
         }
       }
+    },
+    "kb_candidates": {
+      "type": "array",
+      "description": "Proposed additions/updates to the role's accumulated KB for this project. Coordinator filters by surviving findings (those that passed the synthesizer noise filter) before applying. Optional: a report with no candidates is fine.",
+      "items": {
+        "type": "object",
+        "required": ["op", "section", "content", "finding_ref"],
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": ["add", "deprecate", "confirm-refresh"],
+            "description": "add = new fact; deprecate = mark existing KB bullet as no longer true; confirm-refresh = re-stamp existing entry with today's SHA."
+          },
+          "section": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Topic heading inside the role's KB file (e.g., 'Auth model', 'Rate limiting', 'Known incidents')."
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "description": "For 'add': the bullet text with file:line references. For 'deprecate': key phrase identifying the existing entry. For 'confirm-refresh': same as deprecate — key phrase to match."
+          },
+          "finding_ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Title or id of the finding in THIS report that justifies the candidate. Coordinator drops candidates whose parent finding was filtered out by the synthesizer."
+          },
+          "last_verified_sha": {
+            "type": "string",
+            "description": "Optional: the git SHA at which this fact was verified. Coordinator fills from workspace _index.json if omitted."
+          }
+        }
+      }
     }
   },
   "definitions": {

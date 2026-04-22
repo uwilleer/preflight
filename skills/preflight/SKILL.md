@@ -11,9 +11,36 @@ You are the **coordinator** of a pre-write review panel. The user gives you an a
 
 You do NOT critique the artifact yourself. You coordinate experts who do.
 
-## Pipeline (10 steps)
+## Pipeline (12 steps)
 
-Execute these in order. Do not skip, do not merge.
+Execute these in order. Do not skip, do not merge. **Everything non-trivial is persisted to a workspace directory — the coordinator holds only paths in context, reads file contents on demand. This keeps the main conversation compact-survivable and gives you resumability if the session is interrupted.**
+
+### 0. Workspace init + scope + role-KB load
+
+**Detect scope** (what is "one project" for KB purposes). Try in order:
+1. Walk up from CWD to the nearest directory containing `CLAUDE.md` — that dir is scope. Adapts to monorepos: `prodimex/coreapi/` and `prodimex/frontend/` each get their own KB because each has its own CLAUDE.md.
+2. Else `git rev-parse --show-toplevel` from CWD.
+3. Else CWD itself.
+
+Store as `$SCOPE`. Compute `$SCOPE_SLUG` = path-safe hash of `$SCOPE` (e.g., basename + short hash of full path — collision-resistant across machines).
+
+**Set up workspace.** Create `$WORKSPACE = <repo_root>/.preflight/runs/<YYYYMMDD-HHMM>-<artifact-slug>/` where `<repo_root>` is `$SCOPE` if inside a git repo, else `/tmp/preflight/<SCOPE_SLUG>/`. `mkdir -p $WORKSPACE/expert_reports`. Add `.preflight/runs/` to the repo's `.gitignore` if not already present (append, do not rewrite — check first). Leave `.preflight/role-kb/` uningored (team-shared, see below).
+
+**Cleanup old runs.** Delete `.preflight/runs/*` older than 14 days by mtime. No prompt; this is hygiene.
+
+**Load role-KB (two layers, merged).** Primary = `~/.claude/preflight-kb/<SCOPE_SLUG>/<role>.md` (personal, authoritative). Secondary = `$SCOPE/.preflight/role-kb/<role>.md` (team-shared, optional). For each role that might be selected (see step 5), merge: team entries form the base, personal entries override on conflict. Write merged result to `$WORKSPACE/role_kb/<role>.md` — experts read only from there.
+
+Never read KB for roles you won't dispatch — wasteful. Step 5 (Selector) tells you which roles to actually load. For steps 1-4 just record `$WORKSPACE` path.
+
+**Write `$WORKSPACE/_index.json`:**
+```json
+{
+  "artifact_path": "...", "scope": "...", "scope_slug": "...",
+  "started_at": "ISO-8601", "git_sha": "...", "run_number": <N, from counting prior runs in SCOPE>
+}
+```
+
+**Announce to user** (one line): `workspace: <relative path to WORKSPACE>`. Nothing more — the user will see summaries at the gate.
 
 ### 1. Ingest
 Determine `target_type` from the user request:
@@ -89,7 +116,7 @@ Fails on: `20/22` no unit, `337 меток` of what, `закон 2026` which jur
 
 Notice how Load-bearing facts **already contradict** Заявленное состояние in three places (342 vs 337, 61 vs 65, 18/22 vs 20/22). That's exactly the value: the user sees the drift at the human gate, panels don't waste tokens arguing from stale numbers, and MUST-FIX items get auto-promoted by the synthesizer via rule 6 of the noise filter.
 
-Pass the finalized brief to Selector and each expert, and render it verbatim at the human gate (step 6).
+**Persistence.** The finalized brief is written to `$WORKSPACE/brief.md`. From here on the coordinator references it by path; do not keep the full text in your response context. Selector, experts, synthesizer, and the human gate all read it from disk.
 
 ### 3. Context decide
 Heuristic: does this artifact make claims about existing code?
@@ -116,6 +143,8 @@ For code-heavy targets, delegate to `researcher` skill if available. Otherwise: 
 
 **Why ground_truth matters (also the rationale for Load-bearing facts in step 2).** The artifact is one party's claim about reality. Experts who only read the artifact aim their findings at *that* reality — not the real one. Load-bearing facts is the short, user-visible summary; `ground_truth` is the full verification dataset behind it. Both exist because without them, every expert independently decides whether to trust the artifact — some do, some don't, and the synthesizer cannot tell which findings are anchored in reality. Pre-computing `ground_truth` catches stale line references, already-implemented tasks, and protocol/auth mismatches **before** spending tokens on expert panels, and lets the human gate (step 6) catch remaining drift in one cheap round-trip. This is the single highest-ROI addition to the pipeline for code-touching reviews.
 
+**Persistence.** Write the full context_pack to `$WORKSPACE/context_pack.json`. Write `ground_truth` additionally to `$WORKSPACE/ground_truth.json` as the canonical source — steps 6, 7, 8 read from there. Do not keep the full pack in your response context; reference by path.
+
 ### 5. Selector
 Invoke the `selector` meta-agent (see `meta-agents/selector.md`). Inputs: `brief`, `roles/index.json`, optional `context_pack` summary. Output: `roster.json` with `chosen` (3-5 roles) and `dropped` (with reasons).
 
@@ -124,59 +153,90 @@ Selector may propose **domain-specific** roles not in the catalog (e.g., `quant-
 Hard cap: **5 chosen roles**. If Selector wants more, it must drop some.
 
 ### 6. Human gate
-Show the user:
+
+**Do not dump the brief or ground_truth at the user.** They are on disk. The user's job at this gate is to answer at most 2-5 specific questions that decide whether the panel should run at all, run as-is, or run against a corrected premise. Everything else is noise.
+
+**Generate typed questions.** Walk ground_truth + brief and produce questions only for:
+- **Contradictions** between ground_truth and the artifact (e.g., artifact assumes Basic Auth, code is IP-only).
+- **Already-done scoping** (tasks the plan creates that exist in the tree).
+- **Unverified premises** the plan depends on (e.g., "does Happ parse https:// URIs?" — an empirical gap).
+- **Roster ambiguity** — if Selector had a close call between two roles, ask.
+
+If there are no such items — no gate, just auto-proceed (announce "no blockers — launching panel"). A silent gate is a good gate.
+
+**Question types** (choose per question):
+- `binary` — two options, yes/no or A/B. Use for contradictions and drop-or-keep decisions.
+- `choice` — 3-4 named options for format/scope decisions.
+- `open` — free-form. Use when the right framing is unclear and you need the user's own words.
+
+Regardless of type, the user may always respond with free text; buttons are for speed, not constraint.
+
+**Write two files:**
+- `$WORKSPACE/gate.json` — structured: `{questions: [{id, type, prompt, options?, evidence_path}]}` where `evidence_path` points back into `ground_truth.json` or `brief.md` for the detail behind the question.
+- `$WORKSPACE/gate.md` — what the user sees. Compact render of the same data.
+
+**Render format (gate.md — this is ALL the user sees):**
+
 ```
-## Brief
+## Preflight · <artifact name>
 
-<verbatim brief from step 2 — all five required sections including Load-bearing facts>
+Проверил код — <N> мест, где план расходится с реальностью / требует решения.
+workspace: <relative path>  ·  details in brief.md, ground_truth.json
 
-## Context
+1. <question 1 prompt — one or two sentences, plain language>
+   [a] <option A — what actually happens if you pick this>
+   [b] <option B>
+   (или свой ответ)
 
-Шаг 3 (context decide): <Да/Нет> — <one-line reason>
+2. <question 2 prompt>
+   [a] ...
+   [b] ...
+   [c] ...
 
-## Ground truth (подтвердите до запуска панели)
+3. <open question — just ask>
 
-<only if step 4 ran — else skip this section>
-
-Извлёк из кода (`git HEAD <sha short>`):
-- <fact 1> — <source: file.ext:line or URL>
-- <fact 2> — <source>
-- ...
-
-Рассинхрон с артефактом:
-- <e.g. "артефакт ссылается на views.py:246, реально функция в views.py:217"> (stale line reference)
-- <e.g. "Task 7 plan says «create useUADetect.ts», файл уже существует"> (already done)
-- <none — если совпадает, напиши "нет">
-
-Эти факты — фундамент вердикта. Если что-то неверно или я недоизвлёк — скажите сейчас, до дорогого ревью.
-
-## Selector
-
-Выбрал:
-- <role1> — <one-line reason>
-- <role2> — <one-line reason>
-- ...
-
-Отсечены:
-- <role> — <one-line reason>
-- ...
-
-[ok / fix-fact: <fact>→<correction> / edit: <role>→<role> / abort]
+Ответы: строкой вроде "1=a 2=b 3=подожди протестирую на phone", или свободно.
 ```
 
-Render the brief verbatim — no rewording. If the brief fails its own pre-emit checklist (step 2), fix it there, not here.
+No headings beyond the `##` title. No verbatim dumps of brief or ground_truth. If the user wants detail they open the files themselves — and the paths are right there.
 
-**Ground truth is the cheapest gate in the pipeline.** A two-line correction from the user here ("у нас https, не http"; "auth по IP, не Basic") saves a full roundtrip of 3-5 expert runs aimed at the wrong reality. If the user corrects a fact, update the brief's `Load-bearing facts` section and the `ground_truth` context section before dispatching experts — do not fire the panel with a known-false premise.
+**Pre-emit check for the gate:** count questions. If > 5, you either aggregated poorly or the ground_truth has too many issues to run a panel at all. In the latter case abort with "план нуждается в итерации до ревью — я записал N блокеров в gate.md, прочти". Do not run experts against a fundamentally broken premise.
 
-Default in MVP is **gate ON** (visible-default). Wait for user confirmation. On `fix-fact` — patch brief + ground_truth, re-show the gate; repeat until the user says `ok`. On `edit` — swap roles and re-show. On `abort` — stop, return empty report.
+**Processing user answer.** Parse the response into `$WORKSPACE/gate_answers.json`. For each answer:
+- If it changes a load-bearing fact → patch `brief.md` + `ground_truth.json` in place, re-write `gate.md` with the remaining open questions (if any), re-show.
+- If it's a roster edit → update roster, note in `_index.json`, proceed.
+- If it's an abort → write `$WORKSPACE/aborted.json` with reason, stop.
+
+Iterate until the user says "ok" or equivalent (`всё`, `поехали`, empty reply after all questions answered). Then proceed to dispatch.
+
+**Why this is the cheapest gate in the pipeline.** A two-letter answer here ("1=a 2=a") saves a full round-trip of 3-5 expert runs aimed at the wrong reality. The more verbose the gate, the less the user reads — and the less they read, the less valuable the correction. Compact > comprehensive.
 
 ### 7. Parallel dispatch
-Launch N `Agent` calls **in a single message** (parallel). Each gets:
-- `brief`
+Launch N `Agent` calls **in a single message** (parallel). Each gets, by path-reference where possible (the subagent reads on demand):
+- `brief` from `$WORKSPACE/brief.md`
 - its role prompt from `roles/<name>.md` (or ad-hoc prompt for domain-specific roles)
-- **`conventions` + `architecture` + `ground_truth`** sections from context_pack (always, for every expert)
+- **`conventions` + `architecture` + `ground_truth`** sections from context_pack (always, for every expert) — read from `$WORKSPACE/context_pack.json` and `$WORKSPACE/ground_truth.json`
 - its domain slice of `context_pack` (only sections matching role's `context_sections`)
-- the **claim-citation discipline** block appended to every role prompt (below, verbatim)
+- its **merged role-KB** from `$WORKSPACE/role_kb/<role>.md` (empty file if nothing accumulated yet)
+- the **claim-citation discipline** block + **KB usage discipline** block appended to every role prompt (below, verbatim)
+
+**Role-KB usage discipline (verbatim append to every expert prompt):**
+
+```
+You have access to a role-KB file at `$WORKSPACE/role_kb/<role>.md`. This is accumulated knowledge about THIS project from previous preflight runs that involved your role. It is a starting-point hypothesis — NOT fact. Treat it as:
+
+- A shortcut to avoid re-discovering conventions, architecture patterns, past incidents, and domain-specific invariants that other experts like you have already surfaced.
+- NOT a substitute for verification. Every KB entry carries a `last_verified <sha, date>` tag. If an entry is older than 90 days or more than 100 commits on the cited file, it may be stale.
+- NEVER a valid MUST-FIX citation on its own. If a KB entry is load-bearing for a MUST-FIX finding, you must re-verify by grep/read NOW and set `evidence_source: code_cited` (or doc_cited). A finding that only cites KB must be `evidence_source: reasoning` and will be downgraded.
+
+At the end of your run, add `kb_candidates` to your ExpertReport: a list of entries you think would help future experts in your role on THIS project. Each candidate has:
+- `op`: "add" (new fact), "deprecate" (mark old KB entry as no longer true), or "confirm-refresh" (re-confirm an existing entry with today's SHA).
+- `section`: short topic heading ("Auth model", "Rate limiting", "Known incidents", ...).
+- `content`: the bullet(s) to add — facts, not opinions; with file:line refs.
+- `finding_ref`: the id/title of the finding in THIS report that motivated the candidate — so the coordinator can drop candidates whose parent finding was filtered as noise.
+
+Do NOT propose KB candidates from ephemeral reasoning, candidate titles, or reviewed-artifact quotes. KB is for invariants that will outlive this run.
+```
 
 **Claim-citation discipline (verbatim append to every expert prompt):**
 
@@ -203,7 +263,7 @@ Model policy:
 - Opus opt-in for roles flagged `model: opus` in frontmatter — currently `security` and `contrarian-strategist`.
 - Haiku only for truly trivial subtasks (simple index lookups, short formatting). Never for expert reviews or synthesis.
 
-Each expert returns an `ExpertReport` JSON matching `schemas/expert-report.json`.
+Each expert returns an `ExpertReport` JSON matching `schemas/expert-report.json`. Save each as `$WORKSPACE/expert_reports/<role>.json`. Coordinator subsequently refers to these by path.
 
 ### 8. Collect + Synthesize
 
@@ -222,7 +282,12 @@ Agent(
   description: "Synthesize preflight panel",
   prompt: <full content of meta-agents/synthesizer.md>
          + "\n\n## Inputs\n\n"
-         + JSON.stringify({brief, conventions, ground_truth, expert_reports: [...]})
+         + JSON.stringify({
+             brief: <read $WORKSPACE/brief.md>,
+             conventions: <read from $WORKSPACE/context_pack.json>,
+             ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check>,
+             expert_reports: <read all $WORKSPACE/expert_reports/*.json>
+           })
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
 )
 ```
@@ -233,7 +298,7 @@ Inputs to include verbatim in the prompt:
 - the `ground_truth` section of `context_pack` from step 4, refreshed by the drift pre-check above (empty object `{}` if step 4 was skipped) — noise-filter rules 5 and 6 depend on this being present, so passing `{}` silently disables ground-truth auto-promotion and artifact_cited-vs-code-behaviour demotion
 - the array of `ExpertReport` objects from step 7
 
-The subagent returns a JSON object matching the schema in `synthesizer.md`. Save it as `synth_result` — you will cite from it in step 9.
+The subagent returns a JSON object matching the schema in `synthesizer.md`. Save it as `$WORKSPACE/synth_result.json` — step 9 reads from there, step 11 applies its `surviving_findings` set against `kb_candidates` to filter KB updates.
 
 If any expert returned invalid JSON in step 7, retry that expert once before invoking synthesizer. If retry also fails, pass the reduced array to synthesizer and list the skipped expert in `skipped_experts` of the final output.
 
@@ -315,6 +380,8 @@ The guiding principle: **the user's attention is the scarce resource.** Every li
 
 **Report language matches the artifact's language** (if brief is in Russian, report is in Russian).
 
+**Persistence.** Write the rendered markdown to `$WORKSPACE/report.md`. Step 10 (polish) reads it from there.
+
 ### 10. Polish (rubber-duck)
 
 **Separate `Agent` call.** The rendered markdown from step 9 is content-correct but reads like expert-speak — dense, context-bound, hard to parse when the user returns cold after an hour. The rubber-duck agent rewrites it for clarity without changing content: adds a "Ревьюили:" header with artifact path, inserts `file.md:L<N>` anchors where evidence points at concrete locations, shows `было → стало` snippets for MUST-FIX items, and unwinds performatively academic phrasings into plain prose. Technical terms stay — the reader is a senior dev, not a newcomer.
@@ -337,11 +404,40 @@ Agent(
 )
 ```
 
-Emit the returned markdown as the final report to the user.
+Write the polished result to `$WORKSPACE/report.polished.md` and emit it as the final report to the user.
 
 If `target_type` was `chat` or `inline` (no file on disk), pass `artifact_path: "<inline proposal>"` and the proposal text as `artifact_content` — the duck will skip line-anchor insertion but can still polish phrasing.
 
 If the duck's output is empty or truncated, fall back to the step 9 markdown — do not retry silently. Tell the user: "polish-шаг упал, показываю сырой синтез".
+
+### 11. KB apply + conditional compaction
+
+**Apply `kb_candidates` from surviving findings.** Read `$WORKSPACE/synth_result.json`: collect the set of `finding_ref`s that appear in `must_fix`, `should_fix`, or `nice_fix` (survived the noise filter). For each `ExpertReport` in `$WORKSPACE/expert_reports/`:
+
+- Filter its `kb_candidates` to only those whose `finding_ref` is in the surviving set. Drop the rest.
+- For each surviving candidate, apply to the **personal** KB only: `~/.claude/preflight-kb/<SCOPE_SLUG>/<role>.md`.
+  - `op: "add"` — append a bullet to the given section. If section doesn't exist, create it. Prepend `last_verified: <today>, sha <git_sha>`.
+  - `op: "deprecate"` — find existing entry matching `section + content[key phrase]`, wrap it in `~~...~~ (deprecated YYYY-MM-DD, sha <git_sha>, superseded by finding "...")`. Never delete.
+  - `op: "confirm-refresh"` — find matching existing entry, update its `last_verified` tag. No text change.
+- Never write to the team-shared `<repo>/.preflight/role-kb/` automatically. Team-share is explicit user action (`preflight-kb publish <role>`), not a side effect.
+- Write `$WORKSPACE/kb_applied.json` summary: `{role: {added: N, deprecated: M, refreshed: K, dropped_as_noise: D}}`.
+
+If the personal KB file didn't exist, create it with a header `# Role-KB — <role> — <scope>` and a `## Entries` section.
+
+**Conditional compaction.** After applying, check each touched KB file:
+- If the file exceeds **200 non-blank lines**, OR
+- If `_index.json` shows `run_number % 10 == 0` for this scope, OR
+- If any entry's `last_verified` is > **90 days** old
+
+→ spawn a **KB-compactor** subagent (separate `Agent` call, model=sonnet) with the current KB file as input. Its job:
+- Dedup bullets that say the same thing in different words — keep the one with the newest `last_verified`.
+- Consolidate 3+ related bullets under a shared subsection.
+- Drop entries older than 90 days that were never `confirm-refresh`'d.
+- Return the rewritten KB file; coordinator overwrites in place with a git-style diff summary written to `$WORKSPACE/kb_compaction.diff`.
+
+Compaction is best-effort — if the subagent fails or returns malformed output, skip (do not block the run) and flag in `$WORKSPACE/kb_applied.json`.
+
+**Announce to user** (one line): `KB applied: <role1>:+N, <role2>:+M  ·  compacted: <roles>  ·  details: $WORKSPACE/kb_applied.json`. Nothing more.
 
 ## Cost budget
 
@@ -367,6 +463,9 @@ Target: **≤ $0.15 per review** on a ≤10k-token artifact with 3-5 experts (mo
 - **"Эксперт сказал факт о коде — я процитирую без проверки."** Evidence cascade — the root failure. If the claim is verifiable by one `grep` in ten seconds (named file, named function, named line, named protocol behaviour), you are OBLIGED to verify it before the synthesizer emits a verdict. Observed failure in practice: an expert stated "library X does not support protocol http://" — the plan actually specified `https://`, so the whole finding aimed at a fictional problem and drove the panel to REJECT. The expert sounded confident; reality was orthogonal. Check before you trust. If the same fact is already in `ground_truth`, cite that. If not, grep it yourself or add to `ground_truth` in a follow-up scan.
 - **"Артефакт меняется во время ревью."** Parallel agents writing code, user editing the spec — `ground_truth.git_sha` was snapshotted at step 4, synthesizer runs later. The drift pre-check is a mandatory part of step 8, not a "nice to run" — skip it and the panel may vote REJECT on work that has already been merged.
 - **"Brief has no Load-bearing facts section — it's fine, artifact is short."** The section is load-bearing precisely because short artifacts hide their assumptions. A one-page plan that says "use the HTTPS proxy subscription URL" silently assumes transport, auth, and URI schema — three failure axes. If you cannot name 3 invariants whose falsehood would invalidate the review, you haven't read the artifact adversarially enough.
+- **"Дамп всего контекста на гейте."** The user's attention is scarce; 30 lines of facts buries the 3 questions that actually matter. Everything is on disk (`brief.md`, `ground_truth.json`) — the gate renders at most 2-5 typed questions pointing back at those files. If you can't compress the gate to that size, the run has too many open issues to be worth experts' time — abort and ask the user to fix the plan first.
+- **"role-KB говорит X — я процитирую."** KB is accumulated hypothesis from past runs, not fact. A MUST-FIX finding whose only evidence is a KB bullet must be re-verified against current code (→ `code_cited`) or downgraded to SHOULD. Otherwise KB decays into an amplifier of stale mistakes: one wrong entry, cited uncritically across 20 future runs, becomes dogma.
+- **"Автоматически писать в team-KB."** `<repo>/.preflight/role-kb/` is explicit user action. Silently committing personal observations into a shared file is how infrastructure details leak into git history. Personal KB (`~/.claude/...`) is side-effect-safe; team-KB requires intent.
 
 ## References
 
