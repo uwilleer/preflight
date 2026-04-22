@@ -37,7 +37,7 @@ The brief is consumed by **two readers**: every expert in step 7 AND the user at
 **Success criteria:** <what "this review succeeded" means — verifiable, 3-5 bullets>
 ```
 
-**Why load-bearing facts:** the artifact is one party's claim about reality. Experts who only read the artifact produce findings aimed at *that* reality — not the real one. A load-bearing fact is anything where "if the artifact got this wrong, every downstream expert finding is a waste of tokens". The transport being TLS vs plain, auth being IP vs Basic, a task already being implemented vs claimed-to-be-done — these are single-point-of-failure invariants. Extract them from the code/docs yourself before the panel runs, so experts can trust the inputs and the user can catch drift at the human gate.
+**Timing note.** Load-bearing facts are *filled from* `ground_truth` built in step 4, so for code-touching artifacts the brief is completed in two passes: draft the first four sections now, run steps 3-4 to build `ground_truth`, then populate Load-bearing facts from `load_bearing_facts_source` before the human gate (step 6). For `n/a` artifacts (step 3 says skip) the brief is complete in one pass. See step 4 for the *why*.
 
 **Gloss rules** (non-negotiable):
 
@@ -58,7 +58,7 @@ The brief is consumed by **two readers**: every expert in step 7 AND the user at
 3. Jurisdiction named for any regulatory claim.
 4. No acronym appears without expansion on first use.
 5. Every load-bearing fact has a source (`file.ext:line` verified by grep, or URL). Facts without sources are opinions, not facts — strip or verify.
-6. Load-bearing facts contradict or confirm specific claims in `Заявленное состояние`. If load-bearing facts trivially repeat the artifact ("план говорит X, код тоже X"), you either underextracted or the artifact has no code claims — re-check step 3.
+6. Every load-bearing fact is *non-trivial* — something a cold-reading expert would not take on faith from the artifact alone. Mere restatement of the artifact's own numbers is zero information: either you underextracted (real surprises are elsewhere in the code), or the artifact makes no code claims (re-check step 3 and write `n/a`). Contradictions are the highest-value payload; silent confirmations of suspect claims are second.
 7. A senior dev unfamiliar with this product can read the brief cold and answer: **what does it do, who uses it, what specifically are we reviewing, what invariants are load-bearing, how do we know the review succeeded**. If any is ambiguous, rewrite.
 
 If any check fails, fix before step 3. The brief is load-bearing — a vague brief produces generic expert findings and confuses the user at the gate.
@@ -89,7 +89,7 @@ Fails on: `20/22` no unit, `337 меток` of what, `закон 2026` which jur
 
 Notice how Load-bearing facts **already contradict** Заявленное состояние in three places (342 vs 337, 61 vs 65, 18/22 vs 20/22). That's exactly the value: the user sees the drift at the human gate, panels don't waste tokens arguing from stale numbers, and MUST-FIX items get auto-promoted by the synthesizer via rule 6 of the noise filter.
 
-Save mentally or as `brief.md` in working memory. You will pass this to Selector and each expert, and render it verbatim at the human gate (step 6).
+Pass the finalized brief to Selector and each expert, and render it verbatim at the human gate (step 6).
 
 ### 3. Context decide
 Heuristic: does this artifact make claims about existing code?
@@ -114,7 +114,7 @@ For code-heavy targets, delegate to `researcher` skill if available. Otherwise: 
 
 **Why conventions matter:** an expert proposing a pattern that contradicts existing project conventions creates a useless finding. For example, if the project uses SQLAlchemy's repository pattern everywhere, an expert suggesting raw psycopg2 is ignoring context. Send `conventions` so experts can flag conflicts with, or violations of, established patterns — not generic best practices.
 
-**Why ground_truth matters:** experts don't have time to re-verify every file:line the artifact cites. Without ground_truth, every expert independently decides whether to trust the artifact — some do, some don't, and the synthesizer can't tell which findings are anchored in reality. With ground_truth pre-computed, the coordinator catches stale line references, already-implemented tasks, and protocol/auth mismatches **before** spending tokens on expert panels. This is the single highest-ROI addition to the pipeline for code-touching reviews.
+**Why ground_truth matters (also the rationale for Load-bearing facts in step 2).** The artifact is one party's claim about reality. Experts who only read the artifact aim their findings at *that* reality — not the real one. Load-bearing facts is the short, user-visible summary; `ground_truth` is the full verification dataset behind it. Both exist because without them, every expert independently decides whether to trust the artifact — some do, some don't, and the synthesizer cannot tell which findings are anchored in reality. Pre-computing `ground_truth` catches stale line references, already-implemented tasks, and protocol/auth mismatches **before** spending tokens on expert panels, and lets the human gate (step 6) catch remaining drift in one cheap round-trip. This is the single highest-ROI addition to the pipeline for code-touching reviews.
 
 ### 5. Selector
 Invoke the `selector` meta-agent (see `meta-agents/selector.md`). Inputs: `brief`, `roles/index.json`, optional `context_pack` summary. Output: `roster.json` with `chosen` (3-5 roles) and `dropped` (with reasons).
@@ -168,7 +168,7 @@ Render the brief verbatim — no rewording. If the brief fails its own pre-emit 
 
 **Ground truth is the cheapest gate in the pipeline.** A two-line correction from the user here ("у нас https, не http"; "auth по IP, не Basic") saves a full roundtrip of 3-5 expert runs aimed at the wrong reality. If the user corrects a fact, update the brief's `Load-bearing facts` section and the `ground_truth` context section before dispatching experts — do not fire the panel with a known-false premise.
 
-Default in MVP is **gate ON** (visible-default). Wait for user confirmation. On `fix-fact` — patch brief + ground_truth, re-show the gate (one iteration allowed before dispatch). On `edit` — swap roles and re-show. On `abort` — stop, return empty report.
+Default in MVP is **gate ON** (visible-default). Wait for user confirmation. On `fix-fact` — patch brief + ground_truth, re-show the gate; repeat until the user says `ok`. On `edit` — swap roles and re-show. On `abort` — stop, return empty report.
 
 ### 7. Parallel dispatch
 Launch N `Agent` calls **in a single message** (parallel). Each gets:
@@ -185,11 +185,11 @@ You are cited to the user by the synthesizer. Every finding's `evidence` must ca
 
 - `code_cited` — claim about project code (file, function, schema, behaviour). Requires `file.ext:line` that you verified by grep/read during your run. Use this when you opened the code yourself.
 - `doc_cited` — claim about external protocol, library, API, or standard. Requires URL + a short verbatim quote (inline, in the evidence string). Use this when you read official docs or an RFC.
-- `artifact_cited` — claim about what the artifact itself says. Requires artifact section/line. Use this when critiquing what the plan proposes, not how reality behaves.
+- `artifact_cited` — claim about what the artifact itself *proposes*. Requires artifact section/line. Use this when the problem is in the plan's own text — e.g. "spec contradicts itself between §2 and §4", "task 7 says create X but task 3 says X is already done". Do NOT use this for claims about how production code behaves — for those you need `code_cited` (the artifact quoting itself is not evidence that the real code does what the artifact says it does).
 - `reasoning` — expert judgement without an external citation. Allowed, but will be downgraded: a `reasoning` finding cannot be MUST-FIX.
 
 Rules:
-1. If you want a finding to be MUST-FIX, it MUST have `code_cited`, `doc_cited`, or `artifact_cited` evidence. The synthesizer auto-downgrades MUST→SHOULD when `evidence_source == "reasoning"`.
+1. If you want a finding to be MUST-FIX, it MUST have `code_cited` or `doc_cited`, OR `artifact_cited` for a finding about the artifact itself (see above). Synthesizer auto-downgrades MUST→SHOULD when `evidence_source == "reasoning"`, and also when `artifact_cited` is used for a claim about code behaviour without cross-confirmation by `code_cited`.
 2. Trust `ground_truth` in the context pack as already-verified. Cite from it directly (`ground_truth: file_verifications[3]`) instead of re-grepping.
 3. If a load-bearing fact in the brief contradicts the artifact, that is already a finding — flag it even if the rest of your domain is clean.
 4. Do NOT fabricate line numbers or function signatures. If you can't find the grep hit in one or two tries, mark `reasoning` and move on — the coordinator or user will run the check.
@@ -207,6 +207,8 @@ Each expert returns an `ExpertReport` JSON matching `schemas/expert-report.json`
 
 ### 8. Collect + Synthesize
 
+**Drift pre-check (mandatory if step 4 ran).** Before invoking synthesizer, compare current `git rev-parse HEAD` with `ground_truth.git_sha`. If they differ, the repo moved during review — a MUST-FIX against "Task 7 is already done" is worthless if Task 7 was just merged. Re-run `file_verifications` and `already_done` against the new HEAD, update `ground_truth`, and pass the updated object (with `git_sha` bumped) to the synthesizer. One short note in the polished report: "ground_truth refreshed at synth time, SHA `<old>` → `<new>`, N findings affected."
+
 **This is a separate `Agent` call. Not inline reasoning. Not "I'll just dedupe in my head". A real subagent invocation.**
 
 Why the rule is mechanical, not moral: the coordinator model (you) is under strong pressure to ad-lib — it feels faster, you already have all the data in context, the structure seems obvious. That's exactly the failure mode this step exists to prevent. A real subagent call forces: (a) the exact synthesizer prompt, (b) a structured JSON return, (c) no contamination from coordinator opinions. Skip this and the noise filter + decision formatting + unbiased recommendation rules all get silently dropped.
@@ -220,14 +222,15 @@ Agent(
   description: "Synthesize preflight panel",
   prompt: <full content of meta-agents/synthesizer.md>
          + "\n\n## Inputs\n\n"
-         + JSON.stringify({brief, conventions, expert_reports: [...]})
+         + JSON.stringify({brief, conventions, ground_truth, expert_reports: [...]})
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
 )
 ```
 
 Inputs to include verbatim in the prompt:
-- the `brief` from step 2
+- the `brief` from step 2 (finalized with Load-bearing facts populated)
 - the `conventions` section of `context_pack` from step 4 (empty string if step 4 was skipped)
+- the `ground_truth` section of `context_pack` from step 4, refreshed by the drift pre-check above (empty object `{}` if step 4 was skipped) — noise-filter rules 5 and 6 depend on this being present, so passing `{}` silently disables ground-truth auto-promotion and artifact_cited-vs-code-behaviour demotion
 - the array of `ExpertReport` objects from step 7
 
 The subagent returns a JSON object matching the schema in `synthesizer.md`. Save it as `synth_result` — you will cite from it in step 9.
@@ -362,7 +365,7 @@ Target: **≤ $0.15 per review** on a ≤10k-token artifact with 3-5 experts (mo
 - **"Dump everything the experts said so the user can decide what matters"** — that's abdication, not coordination. If synthesizer flagged something as `dropped` (generic, no artifact evidence), it stays in the collapsed `<details>` block, not in the main report. The user's attention is the budget; protect it.
 - **"Pick the 'safe' recommendation so nobody's angry"** — recommendations grounded in "security always wins" or "performance always wins" are bias in a nice suit. Every recommendation must trace to the brief's success criteria, a stated constraint, or a project convention. If it can't, say "равновесие — решать вам" and give the user a decision rule, not a fake pick.
 - **"Эксперт сказал факт о коде — я процитирую без проверки."** Evidence cascade — the root failure. If the claim is verifiable by one `grep` in ten seconds (named file, named function, named line, named protocol behaviour), you are OBLIGED to verify it before the synthesizer emits a verdict. Observed failure in practice: an expert stated "library X does not support protocol http://" — the plan actually specified `https://`, so the whole finding aimed at a fictional problem and drove the panel to REJECT. The expert sounded confident; reality was orthogonal. Check before you trust. If the same fact is already in `ground_truth`, cite that. If not, grep it yourself or add to `ground_truth` in a follow-up scan.
-- **"Артефакт меняется во время ревью."** Parallel agents writing code, user editing the spec — `ground_truth.git_sha` was snapshotted at step 4, synthesizer runs minutes or hours later. Before step 8, compare current `git rev-parse HEAD` with `ground_truth.git_sha`. If drifted: re-run the `file_verifications` and `already_done` checks, update `ground_truth`, and include the delta in synthesizer inputs. A MUST-FIX against Task 7 is worthless if Task 7 was just merged.
+- **"Артефакт меняется во время ревью."** Parallel agents writing code, user editing the spec — `ground_truth.git_sha` was snapshotted at step 4, synthesizer runs later. The drift pre-check is a mandatory part of step 8, not a "nice to run" — skip it and the panel may vote REJECT on work that has already been merged.
 - **"Brief has no Load-bearing facts section — it's fine, artifact is short."** The section is load-bearing precisely because short artifacts hide their assumptions. A one-page plan that says "use the HTTPS proxy subscription URL" silently assumes transport, auth, and URI schema — three failure axes. If you cannot name 3 invariants whose falsehood would invalidate the review, you haven't read the artifact adversarially enough.
 
 ## References
