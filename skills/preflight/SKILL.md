@@ -24,9 +24,72 @@ Determine `target_type` from the user request:
 Load the artifact verbatim. If ambiguous, ask one short question and stop.
 
 ### 2. Brief
-Compress the artifact into a `brief` (1 paragraph + explicit success criteria). The brief is what every expert will read first — keep it tight, load-bearing, and neutral. No judgement, no spoilers.
 
-Save mentally or as `brief.md` in working memory. You will pass this to Selector and each expert.
+The brief is consumed by **two readers**: every expert in step 7 AND the user at the human gate (step 6). Optimize for the **cold reader** — a senior engineer who closed the artifact an hour ago, or an expert who's never seen the product. They know jargon; they don't know *this* product, *this* jurisdiction, *this* domain's numeric landmarks.
+
+**Required sections** (in this order, all mandatory — no fallback-to-vibes):
+
+```
+**Что ревьюим:** <artifact path or "<chat proposal>"> — <one-line what this document is>
+**Продукт:** <one line: what it does, for whom, domain/jurisdiction if regulatory>
+**Заявленное состояние:** <claims made by the artifact — every number carries its unit>
+**Load-bearing facts:** <3-7 invariants that, if wrong, invalidate the whole review — extracted from CODE/DOCS, not from the artifact. Transport protocol, auth mechanism, what's already implemented vs planned-in-artifact, real DB schema, real API shape, live config. Each fact carries a source (file:line or URL). If extraction is skipped in step 3, write "n/a (pure architecture artifact, no code claims)">
+**Success criteria:** <what "this review succeeded" means — verifiable, 3-5 bullets>
+```
+
+**Why load-bearing facts:** the artifact is one party's claim about reality. Experts who only read the artifact produce findings aimed at *that* reality — not the real one. A load-bearing fact is anything where "if the artifact got this wrong, every downstream expert finding is a waste of tokens". The transport being TLS vs plain, auth being IP vs Basic, a task already being implemented vs claimed-to-be-done — these are single-point-of-failure invariants. Extract them from the code/docs yourself before the panel runs, so experts can trust the inputs and the user can catch drift at the human gate.
+
+**Gloss rules** (non-negotiable):
+
+- **Every number carries a unit.** Not `20/22` — `20/22 Phase-2 issues closed`. Not `337 labels` — `337 blockchain-address labels (target 500+)`.
+- **Every proper noun gets one line on first mention.** Competitor names, product names, regulations, frameworks. Not `weaker than CoinKYT/BitOK/ШАРД` — `weaker than CoinKYT/BitOK/ШАРД (incumbent AML-scoring vendors) on label count`.
+- **Regulatory claims name the jurisdiction.** Not `law 2026 on licensing` — `Russian law 2026 on crypto-exchange licensing (draft)`.
+- **No undefined acronyms.** Expand on first use: `MVP (minimum viable product)`, `KYT (know-your-transaction)`.
+
+**What stays out:**
+- Judgement (`"the plan looks solid"`) — experts decide.
+- Spoilers (`"the auth design has a race condition"`) — let experts find it.
+- Implementation excerpts (code, config) — that's context_pack, not brief.
+
+**Pre-emit checklist.** Before passing the brief to Selector or experts, scan:
+
+1. Every number has a unit — no bare `20/22`, `337`, `65`.
+2. Every proper noun (product, competitor, law, framework) has a one-line gloss on first mention.
+3. Jurisdiction named for any regulatory claim.
+4. No acronym appears without expansion on first use.
+5. Every load-bearing fact has a source (`file.ext:line` verified by grep, or URL). Facts without sources are opinions, not facts — strip or verify.
+6. Load-bearing facts contradict or confirm specific claims in `Заявленное состояние`. If load-bearing facts trivially repeat the artifact ("план говорит X, код тоже X"), you either underextracted or the artifact has no code claims — re-check step 3.
+7. A senior dev unfamiliar with this product can read the brief cold and answer: **what does it do, who uses it, what specifically are we reviewing, what invariants are load-bearing, how do we know the review succeeded**. If any is ambiguous, rewrite.
+
+If any check fails, fix before step 3. The brief is load-bearing — a vague brief produces generic expert findings and confuses the user at the gate.
+
+**Worked example (bad → good):**
+
+INPUT artifact: `docs/PROJECT_STATE.md` for product Clartex, claiming Phase-2 MVP 20/22, 337 labels, positioning vs CoinKYT/BitOK/ШАРД under `закон 2026 о лицензировании обменников`.
+
+❌ **Bad brief (expert-speak, cold-reader fails):**
+> Артефакт: docs/PROJECT_STATE.md — стейт + дорожная карта Clartex. Заявляет: Фаза 2 MVP на 20/22, production задеплоен, Scoring Engine v2 + multi-chain + 337 меток. Позиционируется как compliance-платформа под закон 2026 о лицензировании обменников; слабее конкурентов (CoinKYT, BitOK, ШАРД) по базе меток.
+
+Fails on: `20/22` no unit, `337 меток` of what, `закон 2026` which jurisdiction, competitors unglossed, **no Load-bearing facts section** (experts will trust "20/22" and "337" verbatim and have no chance to discover the real numbers differ).
+
+✅ **Good brief:**
+> **Что ревьюим:** `docs/PROJECT_STATE.md` — снимок состояния + roadmap продукта Clartex на 2026-04-07.
+> **Продукт:** Clartex — AML/KYT-платформа (know-your-transaction risk scoring) для криптообменников РФ. Размечает адреса блокчейнов метками риска (mixer, darknet, sanctions), даёт скоринг транзакции, B2B SaaS.
+> **Заявленное состояние:** Phase-2 MVP — 20/22 issues закрыты; production развёрнут; Scoring Engine v2 + multi-chain (BTC/ETH/TRON); 337 меток адресов (target 500+ per chain); Telegram Mini App; CI/CD + Sentry. Остаются #15 (налоговый калькулятор) и #16 (мониторинг адресов). Позиционируется под российский законопроект 2026 о лицензировании крипто-обменников; позиционируется слабее конкурентов CoinKYT / BitOK / ШАРД (incumbent AML-vendors) по базе меток, сильнее по UX/цене.
+> **Load-bearing facts:**
+> - backend-тестов реально 61, не 65 (`pytest --collect-only | tail -1` — `61 tests collected`)
+> - меток адресов в `labels/` — 342, не 337 (`wc -l labels/*.csv` — суммарно 342 строки)
+> - закрытых issue по milestone Phase-2 — 18/22, не 20/22 (gh issue list --milestone "Phase 2" --state closed)
+> - законопроект РФ о лицензировании крипто-обменников — статус «принят в I чтении» на 2026-04-01 ([source: Госдума](https://sozd.duma.gov.ru/bill/...)), не «действует»
+> **Success criteria:**
+> - заявленное состояние соответствует коду (342 меток, 61 backend-тест, Scoring v2 патчи, 4 CI workflow — всё проверяемо)
+> - приоритизация #15 vs #16 адекватна целевому рынку
+> - список техдолга полный и релевантный для compliance-продукта
+> - позиционирование vs incumbents защитимо без маркетинговых допущений
+
+Notice how Load-bearing facts **already contradict** Заявленное состояние in three places (342 vs 337, 61 vs 65, 18/22 vs 20/22). That's exactly the value: the user sees the drift at the human gate, panels don't waste tokens arguing from stale numbers, and MUST-FIX items get auto-promoted by the synthesizer via rule 6 of the noise filter.
+
+Save mentally or as `brief.md` in working memory. You will pass this to Selector and each expert, and render it verbatim at the human gate (step 6).
 
 ### 3. Context decide
 Heuristic: does this artifact make claims about existing code?
@@ -36,15 +99,22 @@ Heuristic: does this artifact make claims about existing code?
 State your decision in one line.
 
 ### 4. Context pack (if decided in step 3)
-Build a **sectioned** `context_pack` ≤10k tokens. Always include these two sections first, then add domain-specific ones:
+Build a **sectioned** `context_pack` ≤10k tokens. Always include these three sections first, then add domain-specific ones:
 
 - **`conventions`** — project coding conventions, architectural decisions, stack constraints. Sources: `CLAUDE.md`, `docs/ARCHITECTURE.md`, `README.md` (tech stack section), `ADR/` directory if exists. This section is sent to ALL experts regardless of their `context_sections`.
 - **`architecture`** — high-level system diagram, service boundaries, existing patterns (e.g. "we use CQRS here", "all DB access via repository layer"). Sources: architecture docs, existing module structure (Glob `src/**`).
+- **`ground_truth`** — verification of claims the artifact makes about existing state. Sent to ALL experts. Includes:
+  - `git_sha` — current `HEAD` SHA (so the synthesizer can detect drift if the repo moves during review).
+  - `file_verifications` — for every `file:line` reference in the artifact: does the file exist? does the line count reach the referenced line? is the named symbol present on that line (grep)? If a reference is stale, record `expected: foo.py:246 — actual: function proxy_subscription at foo.py:217 (−29)`.
+  - `already_done` — tasks the artifact plans as "create X" / "add Y" where X / Y already exists in the tree. This is the #1 source of stale-scope reviews when a parallel agent is working.
+  - `load_bearing_facts_source` — for each load-bearing fact from the brief, the exact grep output or URL+quote that backs it. This is what experts cite instead of re-deriving.
 - **Domain sections** (role-specific): `auth`, `hot_paths`, `data_flows`, `api_surface`, `storage`, `external_deps`, etc.
 
 For code-heavy targets, delegate to `researcher` skill if available. Otherwise: Glob+Grep+Read, hypothesis-first.
 
 **Why conventions matter:** an expert proposing a pattern that contradicts existing project conventions creates a useless finding. For example, if the project uses SQLAlchemy's repository pattern everywhere, an expert suggesting raw psycopg2 is ignoring context. Send `conventions` so experts can flag conflicts with, or violations of, established patterns — not generic best practices.
+
+**Why ground_truth matters:** experts don't have time to re-verify every file:line the artifact cites. Without ground_truth, every expert independently decides whether to trust the artifact — some do, some don't, and the synthesizer can't tell which findings are anchored in reality. With ground_truth pre-computed, the coordinator catches stale line references, already-implemented tasks, and protocol/auth mismatches **before** spending tokens on expert panels. This is the single highest-ROI addition to the pipeline for code-touching reviews.
 
 ### 5. Selector
 Invoke the `selector` meta-agent (see `meta-agents/selector.md`). Inputs: `brief`, `roles/index.json`, optional `context_pack` summary. Output: `roster.json` with `chosen` (3-5 roles) and `dropped` (with reasons).
@@ -56,20 +126,77 @@ Hard cap: **5 chosen roles**. If Selector wants more, it must drop some.
 ### 6. Human gate
 Show the user:
 ```
-Selector выбрал: [chosen roles, with 1-line reason each]
-Отсечены: [dropped roles, with 1-line reason each]
+## Brief
 
-[ok / edit <role>→<role> / abort]
+<verbatim brief from step 2 — all five required sections including Load-bearing facts>
+
+## Context
+
+Шаг 3 (context decide): <Да/Нет> — <one-line reason>
+
+## Ground truth (подтвердите до запуска панели)
+
+<only if step 4 ran — else skip this section>
+
+Извлёк из кода (`git HEAD <sha short>`):
+- <fact 1> — <source: file.ext:line or URL>
+- <fact 2> — <source>
+- ...
+
+Рассинхрон с артефактом:
+- <e.g. "артефакт ссылается на views.py:246, реально функция в views.py:217"> (stale line reference)
+- <e.g. "Task 7 plan says «create useUADetect.ts», файл уже существует"> (already done)
+- <none — если совпадает, напиши "нет">
+
+Эти факты — фундамент вердикта. Если что-то неверно или я недоизвлёк — скажите сейчас, до дорогого ревью.
+
+## Selector
+
+Выбрал:
+- <role1> — <one-line reason>
+- <role2> — <one-line reason>
+- ...
+
+Отсечены:
+- <role> — <one-line reason>
+- ...
+
+[ok / fix-fact: <fact>→<correction> / edit: <role>→<role> / abort]
 ```
 
-Default in MVP is **gate ON** (visible-default). Wait for user confirmation. On `edit` — swap roles and re-show. On `abort` — stop, return empty report.
+Render the brief verbatim — no rewording. If the brief fails its own pre-emit checklist (step 2), fix it there, not here.
+
+**Ground truth is the cheapest gate in the pipeline.** A two-line correction from the user here ("у нас https, не http"; "auth по IP, не Basic") saves a full roundtrip of 3-5 expert runs aimed at the wrong reality. If the user corrects a fact, update the brief's `Load-bearing facts` section and the `ground_truth` context section before dispatching experts — do not fire the panel with a known-false premise.
+
+Default in MVP is **gate ON** (visible-default). Wait for user confirmation. On `fix-fact` — patch brief + ground_truth, re-show the gate (one iteration allowed before dispatch). On `edit` — swap roles and re-show. On `abort` — stop, return empty report.
 
 ### 7. Parallel dispatch
 Launch N `Agent` calls **in a single message** (parallel). Each gets:
 - `brief`
 - its role prompt from `roles/<name>.md` (or ad-hoc prompt for domain-specific roles)
-- **`conventions` + `architecture`** sections from context_pack (always, for every expert)
+- **`conventions` + `architecture` + `ground_truth`** sections from context_pack (always, for every expert)
 - its domain slice of `context_pack` (only sections matching role's `context_sections`)
+- the **claim-citation discipline** block appended to every role prompt (below, verbatim)
+
+**Claim-citation discipline (verbatim append to every expert prompt):**
+
+```
+You are cited to the user by the synthesizer. Every finding's `evidence` must carry a traceable source; generic reasoning does not survive the noise filter. Use the `evidence_source` field on each finding:
+
+- `code_cited` — claim about project code (file, function, schema, behaviour). Requires `file.ext:line` that you verified by grep/read during your run. Use this when you opened the code yourself.
+- `doc_cited` — claim about external protocol, library, API, or standard. Requires URL + a short verbatim quote (inline, in the evidence string). Use this when you read official docs or an RFC.
+- `artifact_cited` — claim about what the artifact itself says. Requires artifact section/line. Use this when critiquing what the plan proposes, not how reality behaves.
+- `reasoning` — expert judgement without an external citation. Allowed, but will be downgraded: a `reasoning` finding cannot be MUST-FIX.
+
+Rules:
+1. If you want a finding to be MUST-FIX, it MUST have `code_cited`, `doc_cited`, or `artifact_cited` evidence. The synthesizer auto-downgrades MUST→SHOULD when `evidence_source == "reasoning"`.
+2. Trust `ground_truth` in the context pack as already-verified. Cite from it directly (`ground_truth: file_verifications[3]`) instead of re-grepping.
+3. If a load-bearing fact in the brief contradicts the artifact, that is already a finding — flag it even if the rest of your domain is clean.
+4. Do NOT fabricate line numbers or function signatures. If you can't find the grep hit in one or two tries, mark `reasoning` and move on — the coordinator or user will run the check.
+5. Do NOT restate the artifact as a finding ("the plan says X"). Findings are about problems with X, evidenced by reality.
+```
+
+This block is the single most important anti-hallucination lever. Without it, experts confidently cite invented line numbers and invented library behaviours, and the synthesizer has no way to tell a grep-verified fact from a plausible-sounding guess.
 
 Model policy:
 - Default: `sonnet`
@@ -234,6 +361,9 @@ Target: **≤ $0.15 per review** on a ≤10k-token artifact with 3-5 experts (mo
 - **"The artifact is short, I'll just critique it myself"** — if the user invoked `/preflight`, run the panel. If you think it's overkill, say so once; if user insists, run the panel.
 - **"Dump everything the experts said so the user can decide what matters"** — that's abdication, not coordination. If synthesizer flagged something as `dropped` (generic, no artifact evidence), it stays in the collapsed `<details>` block, not in the main report. The user's attention is the budget; protect it.
 - **"Pick the 'safe' recommendation so nobody's angry"** — recommendations grounded in "security always wins" or "performance always wins" are bias in a nice suit. Every recommendation must trace to the brief's success criteria, a stated constraint, or a project convention. If it can't, say "равновесие — решать вам" and give the user a decision rule, not a fake pick.
+- **"Эксперт сказал факт о коде — я процитирую без проверки."** Evidence cascade — the root failure. If the claim is verifiable by one `grep` in ten seconds (named file, named function, named line, named protocol behaviour), you are OBLIGED to verify it before the synthesizer emits a verdict. Observed failure in practice: an expert stated "library X does not support protocol http://" — the plan actually specified `https://`, so the whole finding aimed at a fictional problem and drove the panel to REJECT. The expert sounded confident; reality was orthogonal. Check before you trust. If the same fact is already in `ground_truth`, cite that. If not, grep it yourself or add to `ground_truth` in a follow-up scan.
+- **"Артефакт меняется во время ревью."** Parallel agents writing code, user editing the spec — `ground_truth.git_sha` was snapshotted at step 4, synthesizer runs minutes or hours later. Before step 8, compare current `git rev-parse HEAD` with `ground_truth.git_sha`. If drifted: re-run the `file_verifications` and `already_done` checks, update `ground_truth`, and include the delta in synthesizer inputs. A MUST-FIX against Task 7 is worthless if Task 7 was just merged.
+- **"Brief has no Load-bearing facts section — it's fine, artifact is short."** The section is load-bearing precisely because short artifacts hide their assumptions. A one-page plan that says "use the HTTPS proxy subscription URL" silently assumes transport, auth, and URI schema — three failure axes. If you cannot name 3 invariants whose falsehood would invalidate the review, you haven't read the artifact adversarially enough.
 
 ## References
 

@@ -9,6 +9,13 @@ You do **not** add findings of your own. You only organize what the experts repo
 ```json
 {
   "brief": "...",
+  "conventions": "...",
+  "ground_truth": {
+    "git_sha": "a4e3d31",
+    "file_verifications": [{"expected": "views.py:246", "actual": "proxy_subscription at views.py:217", "drift": -29}],
+    "already_done": ["Task 7: useUADetect.ts already exists at frontend/src/composables/useUADetect.ts"],
+    "load_bearing_facts_source": {"transport": "nginx-connect.conf.template:51 — server listens TLS", "...": "..."}
+  },
   "expert_reports": [
     {"role": "security", "verdict": "REVISE", "must_fix": [...], "should_fix": [...], "nice_fix": [...], "out_of_scope": [...]},
     {"role": "performance", "verdict": "APPROVE", "must_fix": [], "should_fix": [...], "nice_fix": [...], "out_of_scope": [...]},
@@ -17,7 +24,9 @@ You do **not** add findings of your own. You only organize what the experts repo
 }
 ```
 
-Each `ExpertReport` obeys `schemas/expert-report.json`.
+Each `ExpertReport` obeys `schemas/expert-report.json`. Each finding carries `evidence_source ∈ {code_cited, doc_cited, artifact_cited, reasoning}` — this drives the step-6 noise filter's severity gate.
+
+`ground_truth` may be empty/absent for pure-architecture artifacts (step 3 skipped step 4). When present, it is authoritative: experts cited from it; contradictions between `ground_truth` and artifact claims are load-bearing findings (step 6, rule 6).
 
 ## Your task
 
@@ -75,6 +84,11 @@ The default failure mode of a panel is volume: experts pad reports with generic 
 2. **Replacement is concrete and actionable by the user.** Drop "consider X" / "think about Y" with no concrete action. Move to `dropped` with reason `"non-actionable"`.
 3. **Not already covered by project conventions.** If a finding proposes a pattern the `conventions` section already mandates (e.g., "use parameterized queries" in a project that already requires them), it's noise. Drop with reason `"already covered by conventions"`.
 4. **Not contradicted by conventions.** If a finding proposes a pattern the project explicitly rejects, drop with reason `"contradicts project convention"`. Don't surface it as disputed — it's just wrong in this project.
+5. **Evidence type gates severity.** Each finding has `evidence_source ∈ {code_cited, doc_cited, artifact_cited, reasoning}`; legacy reports without the field → treat as `reasoning`. Enforce:
+   - If reporter placed a finding in `must_fix` and `evidence_source == "reasoning"` → **downgrade to `should_fix`** and prepend `"(downgraded: reasoning without citation) "` to the title. Do NOT drop — expert judgement is still signal, just not load-bearing.
+   - Exception: downgrade is waived if the finding is `cross_confirmed` by ≥2 roles AND at least one of them has `evidence_source != "reasoning"`. Cross-confirmation by multiple reasoners does not count.
+   - If `evidence_source == "artifact_cited"` and the finding claims a problem about **code behaviour** (not about what the artifact proposes), flag as `needs_verification` in the dropped-or-demoted output; downgrade unless cross-confirmed with `code_cited`. An artifact quoting itself cannot evidence how production code actually behaves.
+6. **Ground-truth contradictions are auto-promoted.** If a finding's evidence matches a `ground_truth.file_verifications` entry marked stale, or a `ground_truth.already_done` entry, promote to MUST-FIX regardless of reporter tier. These are load-bearing premises of the plan — reviewing around them is useless.
 
 After filtering, **compress NICE tier**:
 - If `must_fix.length + should_fix.length ≥ 5`, drop NICE tier entirely (user has enough to act on; NICE is bikeshed territory at this volume).
@@ -112,8 +126,9 @@ Return **only** this JSON:
   "must_fix": [
     {
       "title": "Unsanitized user input in /login",
-      "evidence": "spec §3.2 shows raw email passed to SQL query builder without parameterization",
+      "evidence": "spec §3.2 shows raw email passed to SQL query builder without parameterization; app/auth/login.py:42 confirms current code also concatenates",
       "replacement": "use parameterized query via the existing `db.execute(sql, params)` helper",
+      "evidence_source": "code_cited",
       "reporters": ["security", "testing"],
       "cross_confirmed": true
     }
@@ -168,6 +183,7 @@ Return **only** this JSON:
 - **Collapsing all severity.** Don't promote a NICE to MUST just because two experts mentioned it. Reporter's tier wins unless cross-confirmed at higher tier.
 - **Dropping `out_of_scope` signal.** `untouched_concerns` is the single highest-value output of this synth — it's what a single-reviewer baseline (plan-critic) fundamentally cannot produce.
 - **Skipping the noise filter.** Generic best-practice findings that don't cite the artifact are pure noise; dropping them is not censorship, it's the job.
+- **Trusting `evidence_source: "reasoning"` for MUST-FIX.** Even a confident-sounding expert can hallucinate file paths, library behaviours, or protocol details. The downgrade rule exists because this is the observed failure mode in practice. Enforce it mechanically — do not "promote back to MUST because the expert sounded sure".
 - **Verbose prose.** No explanation text in the JSON output. The coordinator formats the markdown report from this JSON.
 
 ## Retry

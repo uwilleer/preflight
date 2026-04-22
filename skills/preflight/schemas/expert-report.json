@@ -36,12 +36,17 @@
   "definitions": {
     "finding": {
       "type": "object",
-      "required": ["title", "evidence", "replacement"],
+      "required": ["title", "evidence", "replacement", "evidence_source"],
       "additionalProperties": false,
       "properties": {
         "title":       { "type": "string", "minLength": 1, "maxLength": 200 },
         "evidence":    { "type": "string", "minLength": 1, "description": "Cite artifact line/section OR a concrete scenario. No 'might be' hedging." },
-        "replacement": { "type": "string", "minLength": 1, "description": "Concrete fix, not 'consider X'." }
+        "replacement": { "type": "string", "minLength": 1, "description": "Concrete fix, not 'consider X'." },
+        "evidence_source": {
+          "type": "string",
+          "enum": ["code_cited", "doc_cited", "artifact_cited", "reasoning"],
+          "description": "How the evidence was obtained. code_cited = file:line verified by grep during this run. doc_cited = URL + verbatim quote from an external doc/spec. artifact_cited = quote from the reviewed artifact. reasoning = expert judgement without external citation. Synthesizer auto-downgrades MUST→SHOULD when evidence_source is 'reasoning'. Reports from legacy roles without this field are treated as 'reasoning'."
+        }
       }
     }
   }
