@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kirill/preflight/schemas/phase-handoff.json",
+  "title": "PhaseHandoff",
+  "description": "Main-session ↔ sub-coordinator handoff contract. Each phase subagent returns one of phase_a_output / phase_b_output / phase_c_output. Main session parses by this schema — no prose interpretation. All phases write exceptions to $WORKSPACE/phase-<a|b|c>-error.json and set error_path; main session relays that file to the user verbatim and stops.",
+  "definitions": {
+    "phase_a_input": {
+      "type": "object",
+      "required": ["cwd", "user_request", "now_iso"],
+      "additionalProperties": false,
+      "properties": {
+        "cwd": {
+          "type": "string",
+          "description": "Main session's current working directory. Phase A computes $SCOPE by walking up to the nearest CLAUDE.md from here."
+        },
+        "user_request": {
+          "type": "string",
+          "description": "Verbatim /preflight invocation — argument, pasted text, or the chat-handle keyword."
+        },
+        "now_iso": {
+          "type": "string",
+          "description": "ISO-8601 timestamp at invocation. Phase A uses this to timestamp $WORKSPACE name deterministically."
+        },
+        "resume_from": {
+          "type": ["string", "null"],
+          "description": "Workspace path if user chose to resume an interrupted run; null otherwise."
+        },
+        "gate_answers": {
+          "type": ["object", "null"],
+          "description": "Only present on Phase A re-iteration — user's answers to the previous gate that changed load-bearing facts, forcing brief/ground_truth regeneration."
+        }
+      }
+    },
+    "phase_a_output": {
+      "type": "object",
+      "required": ["workspace_path", "last_completed_step"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_path": {
+          "type": "string",
+          "description": "Absolute path to $WORKSPACE. Main session passes this as input to Phase B and stores for potential resume."
+        },
+        "last_completed_step": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6,
+          "description": "Highest step completed. Normal completion = 6 (gate emitted or auto-proceed decided)."
+        },
+        "gate": {
+          "description": "null when no blockers (auto-proceed to Phase B). Object when user must answer.",
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["questions_count", "render"],
+              "additionalProperties": false,
+              "properties": {
+                "questions_count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5,
+                  "description": "Count of questions in gate.json — if > 5, Phase A aborts instead (see 'aborted')."
+                },
+                "render": {
+                  "type": "string",
+                  "maxLength": 4000,
+                  "description": "Markdown body of gate.md. Emit empty string AND render_too_long: true when gate.md exceeds 4000 chars — main session falls back to reading the file from disk."
+                },
+                "render_too_long": {
+                  "type": "boolean",
+                  "description": "Set true when gate.md was too large to inline; main session reads workspace_path/gate.md instead."
+                }
+              }
+            }
+          ]
+        },
+        "aborted": {
+          "description": "Set when Phase A decided the premise is broken and panel should not run. Main session surfaces reason to user and stops.",
+          "type": "object",
+          "required": ["reason"],
+          "additionalProperties": false,
+          "properties": {
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        },
+        "error_path": {
+          "type": ["string", "null"],
+          "description": "Absolute path to $WORKSPACE/phase-a-error.json if an exception was raised. Main session reads, prints, and stops."
+        }
+      }
+    },
+    "phase_b_input": {
+      "type": "object",
+      "required": ["workspace_path"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_path": { "type": "string" },
+        "gate_answers_path": {
+          "type": ["string", "null"],
+          "description": "Absolute path to gate_answers.json if gate ran; null if Phase A auto-proceeded."
+        }
+      }
+    },
+    "phase_b_output": {
+      "type": "object",
+      "required": ["workspace_path", "last_completed_step", "report_path"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_path": { "type": "string" },
+        "last_completed_step": {
+          "type": "integer",
+          "minimum": 7,
+          "maximum": 9,
+          "description": "Normal completion = 9 (report.md rendered)."
+        },
+        "report_path": {
+          "type": "string",
+          "description": "Absolute path to $WORKSPACE/report.md."
+        },
+        "report": {
+          "type": "string",
+          "maxLength": 15000,
+          "description": "Markdown body of report.md. Emit empty string AND report_too_long: true when report.md exceeds 15000 chars — main session falls back to reading from report_path."
+        },
+        "report_too_long": { "type": "boolean" },
+        "skipped_experts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Roles whose expert call failed twice and were dropped from synthesis."
+        },
+        "drift_refreshed": {
+          "type": "boolean",
+          "description": "True when step-8 drift pre-check re-ran file_verifications/already_done against a moved HEAD."
+        },
+        "error_path": { "type": ["string", "null"] }
+      }
+    },
+    "phase_c_input": {
+      "type": "object",
+      "required": ["workspace_path"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_path": { "type": "string" }
+      }
+    },
+    "phase_c_output": {
+      "type": "object",
+      "required": ["workspace_path", "last_completed_step"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_path": { "type": "string" },
+        "last_completed_step": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 11
+        },
+        "polished_report_path": {
+          "type": ["string", "null"],
+          "description": "Absolute path to report.polished.md, or null when the rubber-duck step was skipped (chat/inline target or < 4k artifact)."
+        },
+        "duck_skipped": { "type": "boolean" },
+        "kb_summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "One-line summary for main session to surface: 'KB applied: <role1>:+N, ... · compacted: <roles>'."
+        },
+        "error_path": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

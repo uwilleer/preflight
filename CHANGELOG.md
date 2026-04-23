@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.0] — 2026-04-23
+
+Architectural refactor: the 12-step pipeline no longer runs inline in the caller's session. `SKILL.md` is now a thin orchestration shell that dispatches three sub-coordinator subagents — Phase A (steps 0–6), Phase B (steps 7–9), Phase C (steps 10–11) — with structured JSON handoffs between them and the user gate. Main-session context per `/preflight` invocation drops from ~80–150k tokens to ~25k regardless of artifact or panel size, freeing 50–100k of working memory for the user's surrounding feature work.
+
+### Breaking changes
+- **`SKILL.md` rewritten as orchestration shell** (~150 lines, was ~550). Pipeline content moved into three new phase-prompt files. Anyone relying on the old SKILL.md structure (e.g., scripts that grep for "### 7. Parallel dispatch") must read from the phase prompts instead.
+- **Workspace contract is now hard requirement.** Phase A→B→C handoffs pass state via `$WORKSPACE`; without a writable workspace, the pipeline cannot proceed. Previously the workspace was an optional persistence layer.
+- **Background Phase C.** KB apply + rubber-duck polish run in a `run_in_background: true` subagent after the user already sees the report. Removes the visible "KB applied" line from the synchronous flow — it now appears as a trailing notification when Phase C completes.
+
+### Added
+- **`schemas/phase-handoff.json`** — contract for main ↔ phase JSON handoffs. Three definitions: `phase_a_input/output`, `phase_b_input/output`, `phase_c_input/output`. Main session parses by schema; no prose interpretation.
+- **`meta-agents/sub-coordinator-phase-a.md`** — full prompt for steps 0–6 (workspace init, ingest, brief, context_pack, selector, role-KB load, gate emission).
+- **`meta-agents/sub-coordinator-phase-b.md`** — full prompt for steps 7–9 (parallel dispatch, drift pre-check + synthesis, report render). Carries the verbatim claim-citation discipline + role-KB usage discipline blocks.
+- **`meta-agents/sub-coordinator-phase-c.md`** — full prompt for steps 10–11 (rubber-duck polish, KB apply + conditional compaction). Inline KB-compactor prompt (no separate meta-agent file needed for it).
+- **Phase-level error handling.** Each phase wraps execution and writes `$WORKSPACE/phase-<a|b|c>-error.json` with `{step, message, stack_trace, partial_state_paths}` on exception; main session surfaces the error path and stops (Phase A/B) or surfaces and proceeds (Phase C, non-blocking).
+- **Hard caps on inline handoff payloads.** `gate.render` ≤ 4000 chars (else path-only fallback), `report` ≤ 15000 chars (else path-only fallback). Prevents handoff JSON itself from re-bloating main context.
+
+### Changed
+- **Resumability is now phase-granular** instead of step-granular. Main session checks `_index.json.last_completed_step` and dispatches Phase A / Phase B / Phase C / nothing accordingly. Within a phase, the existing step-level idempotency still applies.
+- **Gate iteration** is now an explicit re-spawn loop: when the user's answer changes load-bearing facts, main re-spawns Phase A with `gate_answers` input; Phase A patches `brief.md` / `ground_truth.json` and emits the next gate.
+
+### Fixed
+- **Subagent context isolation.** Previously the coordinator read `expert_reports/*.json` and `synth_result.json` into its own context to JSON.stringify them into synthesizer / render calls. Phase B now does that inside its own subagent context; main session never sees the contents.
+
+### Known follow-ups (not in this release)
+- Inline progress visibility during Phase B (5–15 min silent execution). Subagent `description` gives one-liner status but no live step-by-step. Possible future fix: Phase B writes `$WORKSPACE/progress.log` and main polls on a slow timer (e.g., 30s) — deliberately deferred until the silent UX is observed in real use.
+- Cross-phase profiling: aggregate `_index.json.dispatch[]` token counts across A/B/C to surface "Phase B used 47k tokens / $0.18" at the trailing summary. Useful but not load-bearing.
+
 ## [0.4.0] — 2026-04-23
 
 Closes the single follow-up carried forward from v0.3.0: the `artifact_cited` enum value did double duty (claims about the artifact itself vs claims about code behaviour quoted through the artifact), forcing the synthesizer to make a best-effort semantic call from prose. Rule 5b is now mechanical — applied by enum value alone — because reports carry the distinction explicitly.
