@@ -79,8 +79,8 @@
         "replacement": { "type": "string", "minLength": 1, "description": "Concrete fix, not 'consider X'." },
         "evidence_source": {
           "type": "string",
-          "enum": ["code_cited", "doc_cited", "artifact_cited", "reasoning"],
-          "description": "How the evidence was obtained. code_cited = file:line verified by grep during this run. doc_cited = URL + verbatim quote from an external doc/spec. artifact_cited = quote from the reviewed artifact. reasoning = expert judgement without external citation. Synthesizer auto-downgrades MUST→SHOULD when evidence_source is 'reasoning'. Reports from legacy roles without this field are treated as 'reasoning'."
+          "enum": ["code_cited", "doc_cited", "artifact_self", "artifact_code_claim", "reasoning"],
+          "description": "How the evidence was obtained. code_cited = file:line verified by grep during this run. doc_cited = URL + verbatim quote from an external doc/spec. artifact_self = quote from the reviewed artifact about what the artifact itself proposes/states (internal contradictions, missing steps in a plan, ordering issues) — valid for MUST-FIX. artifact_code_claim = quote from the artifact about how production code allegedly behaves, where you have NOT independently grepped the code — synthesizer auto-downgrades MUST→SHOULD unless cross-confirmed by a code_cited finding from another role. reasoning = expert judgement without external citation; auto-downgraded MUST→SHOULD. Reports from legacy roles without this field are treated as 'reasoning'. Legacy reports using the pre-v0.4.0 'artifact_cited' value are treated as 'artifact_code_claim' (safer default)."
         }
       }
     }

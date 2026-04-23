@@ -284,11 +284,12 @@ You are cited to the user by the synthesizer. Every finding's `evidence` must ca
 
 - `code_cited` — claim about project code (file, function, schema, behaviour). Requires `file.ext:line` that you verified by grep/read during your run. Use this when you opened the code yourself.
 - `doc_cited` — claim about external protocol, library, API, or standard. Requires URL + a short verbatim quote (inline, in the evidence string). Use this when you read official docs or an RFC.
-- `artifact_cited` — claim about what the artifact itself *proposes*. Requires artifact section/line. Use this when the problem is in the plan's own text — e.g. "spec contradicts itself between §2 and §4", "task 7 says create X but task 3 says X is already done". Do NOT use this for claims about how production code behaves — for those you need `code_cited` (the artifact quoting itself is not evidence that the real code does what the artifact says it does).
+- `artifact_self` — claim about what the artifact itself *proposes* or *states*. Requires artifact section/line. Use this when the problem is in the plan's own text — e.g. "spec contradicts itself between §2 and §4", "task 7 says create X but task 3 says X is already done", "step ordering violates a stated dependency". Valid for MUST-FIX.
+- `artifact_code_claim` — claim about how production code behaves, where you only read the code *through* the artifact (the artifact quotes or describes it) and did NOT independently grep the source. Requires the artifact section that makes the code claim. Synthesizer auto-downgrades MUST→SHOULD unless another role's `code_cited` finding cross-confirms — the artifact quoting itself is not evidence the real code does what the artifact says it does. If you grepped the code yourself, use `code_cited` (the stronger citation), not this.
 - `reasoning` — expert judgement without an external citation. Allowed, but will be downgraded: a `reasoning` finding cannot be MUST-FIX.
 
 Rules:
-1. If you want a finding to be MUST-FIX, it MUST have `code_cited` or `doc_cited`, OR `artifact_cited` for a finding about the artifact itself (see above). Synthesizer auto-downgrades MUST→SHOULD when `evidence_source == "reasoning"`, and also when `artifact_cited` is used for a claim about code behaviour without cross-confirmation by `code_cited`.
+1. If you want a finding to be MUST-FIX, it MUST have `code_cited`, `doc_cited`, or `artifact_self`. `artifact_code_claim` and `reasoning` are auto-downgraded MUST→SHOULD by the synthesizer (the former waived only when cross-confirmed by a `code_cited` finding from another role). If the finding is about code behaviour and you read the code through the artifact but did not independently grep, use `artifact_code_claim`. If you grepped the code yourself, use `code_cited` — the stronger citation.
 2. Trust `ground_truth` in the context pack as already-verified. Cite from it directly (`ground_truth: file_verifications[3]`) instead of re-grepping.
 3. If a load-bearing fact in the brief contradicts the artifact, that is already a finding — flag it even if the rest of your domain is clean.
 4. Do NOT fabricate line numbers or function signatures. If you can't find the grep hit in one or two tries, mark `reasoning` and move on — the coordinator or user will run the check.
@@ -338,6 +339,7 @@ Agent(
              brief: <read $WORKSPACE/brief.md>,
              conventions: <read from $WORKSPACE/context_pack.json>,
              ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check>,
+             artifact_content: "<<ARTIFACT-START>>\n" + <verbatim artifact text> + "\n<<ARTIFACT-END>>",
              expert_reports: <read all $WORKSPACE/expert_reports/*.json>
            })
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
@@ -349,7 +351,8 @@ Choose model per-task: for a straightforward panel (3-4 experts with aligned ver
 Inputs to include verbatim in the prompt:
 - the `brief` from step 2 (finalized with Load-bearing facts populated)
 - the `conventions` section of `context_pack` from step 4 (empty string if step 4 was skipped)
-- the `ground_truth` section of `context_pack` from step 4, refreshed by the drift pre-check above (empty object `{}` if step 4 was skipped) — noise-filter rules 5 and 6 depend on this being present, so passing `{}` silently disables ground-truth auto-promotion and artifact_cited-vs-code-behaviour demotion
+- the `ground_truth` section of `context_pack` from step 4, refreshed by the drift pre-check above (empty object `{}` if step 4 was skipped) — noise-filter rules 5 and 6 depend on this being present, so passing `{}` silently disables ground-truth auto-promotion and `artifact_code_claim` cross-confirm checks
+- the **artifact text itself**, wrapped in `<<ARTIFACT-START>>`…`<<ARTIFACT-END>>` per the step-7 delimiter rule — required for the synthesizer to spot-check `artifact_self` citations against the actual artifact and to apply rule 5b mechanically. If unavailable (e.g., resumed run with the artifact gone), pass an empty string and the synthesizer will fall back to legacy pattern-matching and set `artifact_content_missing: true` in its output
 - the array of `ExpertReport` objects from step 7
 
 The subagent returns a JSON object matching the schema in `synthesizer.md`. Save it as `$WORKSPACE/synth_result.json` — step 9 reads from there, step 11 applies the surviving-titles set against expert `kb_candidates` to filter KB updates.
@@ -533,6 +536,7 @@ Set `_index.json.last_completed_step = 11` — this is the signal that future hy
 - **"Дамп всего контекста на гейте."** The user's attention is scarce; 30 lines of facts buries the 3 questions that actually matter. Everything is on disk (`brief.md`, `ground_truth.json`) — the gate renders at most 2-5 typed questions pointing back at those files. If you can't compress the gate to that size, the run has too many open issues to be worth experts' time — abort and ask the user to fix the plan first.
 - **"role-KB говорит X — я процитирую."** KB is accumulated hypothesis from past runs, not fact. A MUST-FIX finding whose only evidence is a KB bullet must be re-verified against current code (→ `code_cited`) or downgraded to SHOULD. Otherwise KB decays into an amplifier of stale mistakes: one wrong entry, cited uncritically across 20 future runs, becomes dogma.
 - **"Автоматически писать в team-KB."** `<repo>/.preflight/role-kb/` is explicit user action. Silently committing personal observations into a shared file is how infrastructure details leak into git history. Personal KB (`~/.claude/...`) is side-effect-safe; team-KB requires intent.
+- **"Артефакт цитирует код, значит это `artifact_self`."** No — `artifact_self` is for claims about what the artifact itself proposes (internal contradictions, ordering, missing steps). The moment the claim is about how production code behaves and you didn't grep that code yourself, it is `artifact_code_claim` (auto-downgraded MUST→SHOULD without code_cited cross-confirm) or `code_cited` (if you did grep). Conflating the two re-introduces the v0.3.0 failure mode where the synthesizer had to make a best-effort semantic call from prose alone.
 - **"Я знаю, для этой роли всегда подходит opus/sonnet."** No — model choice is per-task (step 7), not per-role. Past runs are weak signal, not a rule. A role flagged "always opus" in a previous mental model is wrong because the *artifact* dictates cognitive load, not the *role*. If you catch yourself hardcoding a model in role frontmatter, a shell script, or `roles/index.json`, stop — that's the exact anti-pattern this pipeline was rewritten to kill. Log your chosen model to `_index.json.dispatch[]` and let the record accumulate instead.
 
 ## References

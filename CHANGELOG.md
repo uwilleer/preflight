@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0] — 2026-04-23
+
+Closes the single follow-up carried forward from v0.3.0: the `artifact_cited` enum value did double duty (claims about the artifact itself vs claims about code behaviour quoted through the artifact), forcing the synthesizer to make a best-effort semantic call from prose. Rule 5b is now mechanical — applied by enum value alone — because reports carry the distinction explicitly.
+
+### Breaking changes
+- **`ExpertReport.evidence_source` enum split.** `artifact_cited` → `artifact_self` (claims about what the artifact itself proposes — internal contradictions, ordering, missing steps; valid for MUST-FIX) vs `artifact_code_claim` (claims about production code behaviour quoted *through* the artifact without independent grep; auto-downgraded MUST→SHOULD unless cross-confirmed by a `code_cited` finding from another role). Schema enum now: `[code_cited, doc_cited, artifact_self, artifact_code_claim, reasoning]`.
+- **Legacy migration.** Pre-v0.4.0 reports using `artifact_cited` are treated as `artifact_code_claim` (the safer default — always downgrades MUST without cross-confirm). No migration script needed; workspace artefacts are not re-read between runs.
+
+### Added
+- **Synthesizer receives the artifact text directly** (step 8 input gains `artifact_content`, wrapped in `<<ARTIFACT-START>>`…`<<ARTIFACT-END>>` per the standard delimiter rule). Lets rule 5b spot-check `artifact_self` citations against the actual artifact instead of trusting expert prose.
+- **`artifact_content_missing: bool`** optional field on synthesizer output. `true` when `artifact_content` was absent/empty and the synthesizer fell back to legacy v0.3.0 prose pattern-matching for rule 5b. Surfaces degradation downstream.
+- **Anti-pattern** in `SKILL.md` for conflating `artifact_self` with `artifact_code_claim` (regression guard for the v0.3.0 failure mode this release closes).
+
+### Changed
+- **Rule 5b in `synthesizer.md` is now mechanical.** Triggers on `evidence_source == "artifact_code_claim"` alone — no semantic guesswork from prose. Cross-confirm waiver requires at least one reporter with `evidence_source == "code_cited"` on the same (post-dedup) finding. Legacy fallback path preserved for `artifact_content_missing: true` runs.
+- **Claim-citation discipline block** in `SKILL.md` step 7 rewritten to describe both new enum values with explicit examples and an instruction to prefer `code_cited` over `artifact_code_claim` when the expert grepped the code themselves.
+- **`roles/security.md`** updated to list the new enum values (the only role file that cites the enum directly; the other 11 only inherit the discipline block from `SKILL.md`).
+
+### Known follow-ups (not in this release)
+- None carried forward from v0.3.0.
+
 ## [0.3.0] — 2026-04-23
 
 Self-review pass (the skill ran `/preflight` on its own `SKILL.md`) surfaced seven MUST-FIX items, two architecture decisions, and eleven SHOULD-FIX items. This release implements the MUST-FIX set, both B-branch decisions, and ten of the eleven SHOULD-FIX items. Details: `.preflight/runs/20260423-0220-preflight-self-review/`.
@@ -37,8 +58,8 @@ Self-review pass (the skill ran `/preflight` on its own `SKILL.md`) surfaced sev
 - **Non-git scopes no longer silently corrupt** `_index.json.git_sha`, drift pre-check, and KB entry metadata — all three now handle `null` SHA as a first-class case.
 
 ### Known follow-ups (not in this release)
-- `ExpertReport.evidence_source` enum split `artifact_cited` → `artifact_self` vs `artifact_code_claim`. Requires coordinated edit to `schemas/expert-report.json`, `synthesizer.md` (rule 5b), and all 12 role files. Deferred — current implementation uses a single `artifact_cited` with the synthesizer making a best-effort semantic call.
-- Passing the artifact text directly to the synthesizer (rather than only brief + ground_truth + reports) so rule 5b can mechanically distinguish "plan says X" from "plan claims code does X". Paired with the enum split above.
+- ~~`ExpertReport.evidence_source` enum split `artifact_cited` → `artifact_self` vs `artifact_code_claim`.~~ Done in v0.4.0.
+- ~~Passing the artifact text directly to the synthesizer (rather than only brief + ground_truth + reports) so rule 5b can mechanically distinguish "plan says X" from "plan claims code does X".~~ Done in v0.4.0.
 
 ## [0.2.0] — 2026-04-21
 
