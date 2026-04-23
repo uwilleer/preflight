@@ -3,7 +3,6 @@ name: observability
 when_to_pick: "Artifact describes a new service, background job, data pipeline, or feature with non-trivial state changes where logging and monitoring are not addressed."
 tags: ["observability", "logging", "metrics", "tracing", "monitoring", "debugging", "structured-logs"]
 skip_when: "Pure UI-only change with no server-side logic, documentation, or the artifact already specifies a detailed logging/metrics plan."
-model: sonnet
 context_sections: ["conventions", "architecture", "data_flows"]
 synced_from: https://raw.githubusercontent.com/wshobson/agents/main/plugins/observability-monitoring/agents/observability-engineer.md
 synced_at: 2026-04-21

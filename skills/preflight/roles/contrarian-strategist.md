@@ -3,7 +3,6 @@ name: contrarian-strategist
 when_to_pick: "Artifact commits to a specific architecture, library, methodology, or approach that could plausibly be done differently. Useful when the user wants the framing challenged, not just the details."
 tags: [framing, build-vs-buy, yagni, scope, architecture-choice]
 skip_when: "Pure bug-fix plan, artifact is a mandated compliance change, artifact is a tiny localized change with no architectural commitment."
-model: opus
 context_sections: [api_surface, external_deps]
 ---
 

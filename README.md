@@ -51,20 +51,22 @@ Human gate is **on by default** — you see the proposed panel and can add, remo
 
 ## Role catalog
 
-| Role | Picks up | Model |
-|------|----------|-------|
-| `security` | Auth, injection, secrets, crypto, IDOR, PII | Opus |
-| `performance` | N+1, blocking I/O, missing indexes, memory | Sonnet |
-| `testing` | Coverage gaps, missing edge cases, test strategy | Sonnet |
-| `concurrency` | Race conditions, deadlocks, missing locks | Sonnet |
-| `api-design` | Breaking changes, naming, versioning, idempotency | Sonnet |
-| `data-model` | Schema constraints, migration risk, normalization | Sonnet |
-| `ops-reliability` | Observability, deployment, failure modes, SLOs | Sonnet |
-| `cost-infra` | Cloud cost, LLM spend, unbounded growth | Sonnet |
-| `supply-chain` | Dependencies, licenses, build pipeline integrity | Sonnet |
-| `contrarian-strategist` | Wrong problem, over-engineering, hidden assumptions | Opus |
+| Role | Picks up |
+|------|----------|
+| `security` | Auth, injection, secrets, crypto, IDOR, PII |
+| `performance` | N+1, blocking I/O, missing indexes, memory |
+| `testing` | Coverage gaps, missing edge cases, test strategy |
+| `concurrency` | Race conditions, deadlocks, missing locks |
+| `api-design` | Breaking changes, naming, versioning, idempotency |
+| `data-model` | Schema constraints, migration risk, normalization |
+| `ops-reliability` | Observability, deployment, failure modes, SLOs |
+| `cost-infra` | Cloud cost, LLM spend, unbounded growth |
+| `supply-chain` | Dependencies, licenses, build pipeline integrity |
+| `error-handling` | Swallowed errors, missing timeouts, retry-forever, resource cleanup |
+| `observability` | Missing logs/metrics/traces, alert gaps |
+| `contrarian-strategist` | Wrong problem, over-engineering, hidden assumptions |
 
-Ad-hoc roles (e.g. "quant trader", "GDPR counsel") are generated inline by the Selector when no catalog role fits.
+Model is **not** pinned per role — the coordinator picks the model per dispatch, based on the role's cognitive load against *this* specific artifact, and logs the choice to `_index.json.dispatch[]`. Ad-hoc roles (e.g. "quant trader", "GDPR counsel") are generated inline by the Selector when no catalog role fits.
 
 ## ExpertReport format
 

@@ -3,7 +3,6 @@ name: ops-reliability
 when_to_pick: "Artifact introduces a new service, background job, scheduled task, external dependency, or changes deployment/config — anything that will run in production and can fail."
 tags: ["reliability", "observability", "deployment", "config", "failover", "slos", "on-call"]
 skip_when: "Pure local dev tooling with no production surface. Documentation-only. Pure frontend UI change."
-model: sonnet
 context_sections: ["conventions", "architecture", "external_deps", "data_flows"]
 synced_from: https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/sre-engineer.md
 synced_at: 2026-04-21

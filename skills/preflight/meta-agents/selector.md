@@ -9,7 +9,7 @@ You are invoked once per preflight run. You do **not** critique the artifact you
 The coordinator passes you:
 
 - `brief` — 1-paragraph summary + success criteria of the artifact.
-- `roles_index` — array of `{name, when_to_pick, tags, skip_when, model}` entries generated from `roles/*.md` frontmatter.
+- `roles_index` — array of `{name, when_to_pick, tags, skip_when, context_sections}` entries generated from `roles/*.md` frontmatter. Do NOT emit a `model` field in your `chosen` entries — model choice is per-task (made by the coordinator at step 7 dispatch), not per-role.
 - `context_pack_summary` (optional) — 3-5 line description of what sections the context pack has (`auth`, `hot_paths`, etc.).
 
 ## Your task

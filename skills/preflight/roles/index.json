@@ -12,7 +12,6 @@
       "ergonomics"
     ],
     "skip_when": "Pure internal implementation with no external interface. DB migration with no API surface change. Documentation-only.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -33,7 +32,6 @@
       "locks"
     ],
     "skip_when": "Single-threaded synchronous code with no shared state, pure UI change, documentation.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -53,7 +51,6 @@
       "architecture-choice"
     ],
     "skip_when": "Pure bug-fix plan, artifact is a mandated compliance change, artifact is a tiny localized change with no architectural commitment.",
-    "model": "opus",
     "context_sections": [
       "api_surface",
       "external_deps"
@@ -72,7 +69,6 @@
       "data-volume"
     ],
     "skip_when": "Pure business logic change with no new cloud resources or volume changes. Documentation-only. Local dev tooling.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -95,7 +91,6 @@
       "indexes"
     ],
     "skip_when": "No schema or storage change. Pure in-memory computation with no persistence. Documentation-only.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -117,7 +112,6 @@
       "resource-cleanup"
     ],
     "skip_when": "Pure happy-path feature with no external dependencies, documentation-only, or the artifact already has a detailed error strategy.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -139,7 +133,6 @@
       "structured-logs"
     ],
     "skip_when": "Pure UI-only change with no server-side logic, documentation, or the artifact already specifies a detailed logging/metrics plan.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -161,7 +154,6 @@
       "on-call"
     ],
     "skip_when": "Pure local dev tooling with no production surface. Documentation-only. Pure frontend UI change.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -183,7 +175,6 @@
       "caching"
     ],
     "skip_when": "Pure config change, documentation, or UI-only with no data logic.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -206,7 +197,6 @@
       "input-validation"
     ],
     "skip_when": "Pure documentation, local dev tooling with no external interface, no user input, no secrets.",
-    "model": "opus",
     "context_sections": [
       "conventions",
       "architecture",
@@ -228,7 +218,6 @@
       "third-party"
     ],
     "skip_when": "No new external dependencies added or changed. Pure internal code change. Documentation-only.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture",
@@ -252,7 +241,6 @@
       "fixtures"
     ],
     "skip_when": "Pure infrastructure change, documentation, or the artifact already has a detailed test plan.",
-    "model": "sonnet",
     "context_sections": [
       "conventions",
       "architecture"

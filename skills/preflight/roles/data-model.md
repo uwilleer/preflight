@@ -3,7 +3,6 @@ name: data-model
 when_to_pick: "Artifact introduces or changes a database schema, data structure, storage format, or domain model that will outlive the current release."
 tags: ["schema", "normalization", "migrations", "data-integrity", "domain-model", "indexes"]
 skip_when: "No schema or storage change. Pure in-memory computation with no persistence. Documentation-only."
-model: sonnet
 context_sections: ["conventions", "architecture", "storage", "data_flows"]
 synced_from: https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/03-infrastructure/database-administrator.md
 synced_at: 2026-04-21

@@ -3,7 +3,6 @@ name: error-handling
 when_to_pick: "Artifact describes operations that can fail — external calls, IO, DB queries, async jobs, user input processing — and doesn't specify how errors are handled."
 tags: ["error-handling", "exceptions", "resilience", "async", "failure-modes", "resource-cleanup"]
 skip_when: "Pure happy-path feature with no external dependencies, documentation-only, or the artifact already has a detailed error strategy."
-model: sonnet
 context_sections: ["conventions", "architecture", "data_flows"]
 synced_from: https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/error-detective.md
 synced_at: 2026-04-21

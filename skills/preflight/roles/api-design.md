@@ -3,7 +3,6 @@ name: api-design
 when_to_pick: "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands."
 tags: ["api", "rest", "rpc", "versioning", "breaking-changes", "contracts", "ergonomics"]
 skip_when: "Pure internal implementation with no external interface. DB migration with no API surface change. Documentation-only."
-model: sonnet
 context_sections: ["conventions", "architecture", "api_surface"]
 synced_from: https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ant-design-api-evolution-strategy.md
 synced_at: 2026-04-21

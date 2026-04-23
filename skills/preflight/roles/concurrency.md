@@ -3,7 +3,6 @@ name: concurrency
 when_to_pick: "Artifact involves async code, background jobs, shared state, queues, locks, or any multi-threaded/multi-process design."
 tags: ["concurrency", "race-conditions", "deadlocks", "async", "thread-safety", "locks"]
 skip_when: "Single-threaded synchronous code with no shared state, pure UI change, documentation."
-model: sonnet
 context_sections: ["conventions", "architecture", "data_flows"]
 synced_from: https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/aider-thread-safe-message-dispatching.md
 synced_at: 2026-04-21

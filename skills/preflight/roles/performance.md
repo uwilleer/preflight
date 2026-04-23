@@ -3,7 +3,6 @@ name: performance
 when_to_pick: "Artifact describes data processing, queries, loops, caching, or any operation with non-trivial input size."
 tags: ["performance", "algorithms", "complexity", "n+1", "memory", "caching"]
 skip_when: "Pure config change, documentation, or UI-only with no data logic."
-model: sonnet
 context_sections: ["conventions", "architecture", "data_flows"]
 synced_from: https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/performance-engineer.md
 synced_at: 2026-04-21

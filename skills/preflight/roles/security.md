@@ -3,7 +3,6 @@ name: security
 when_to_pick: "Artifact involves auth, user input, secrets, crypto, API endpoints, file uploads, external integrations, or any trust boundary."
 tags: ["security", "auth", "injection", "crypto", "secrets", "idor", "xss", "input-validation"]
 skip_when: "Pure documentation, local dev tooling with no external interface, no user input, no secrets."
-model: opus
 context_sections: ["conventions", "architecture", "api_surface", "external_deps"]
 synced_from: https://raw.githubusercontent.com/Piebald-AI/claude-code-system-prompts/main/system-prompts/agent-prompt-security-review-slash-command.md
 synced_at: 2026-04-21
@@ -107,16 +106,12 @@ Phase 3 - Vulnerability Assessment:
 - Look for privilege boundaries being crossed unsafely
 - Identify injection points and unsafe deserialization
 
-SEVERITY GUIDELINES:
-- **HIGH**: Directly exploitable vulnerabilities leading to RCE, data breach, or authentication bypass
-- **MEDIUM**: Vulnerabilities requiring specific conditions but with significant impact
-- **LOW**: Defense-in-depth issues or lower-impact vulnerabilities
-
-CONFIDENCE SCORING:
-- 0.9-1.0: Certain exploit path identified, tested if possible
-- 0.8-0.9: Clear vulnerability pattern with known exploitation methods
-- 0.7-0.8: Suspicious pattern requiring specific conditions to exploit
-- Below 0.7: Don't report (too speculative)
+TIER MAPPING — use the preflight schema, not the imported severity/confidence system:
+- `must_fix` — directly exploitable vulnerabilities (RCE, data breach, auth bypass) with a concrete attack path. Requires `evidence_source ∈ {code_cited, doc_cited}`.
+- `should_fix` — vulnerabilities requiring specific conditions but with significant impact; defense-in-depth gaps; hardening gaps with plausible attack path.
+- `nice_fix` — low-impact or defense-in-depth items you'd mention but wouldn't block a release on.
+- **Do not report** items you'd previously have scored below 0.7 confidence — they belong in `dropped` tier (noise).
+- **Do not emit** HIGH/MEDIUM/LOW labels or 0.0-1.0 confidence scores — the schema has no fields for them. Pick the right preflight tier instead.
 
 FALSE POSITIVE FILTERING:
 
@@ -162,10 +157,10 @@ FALSE POSITIVE FILTERING:
 > 3. Are there specific code locations and reproduction steps?
 > 4. Would this finding be actionable for a security team?
 >
-> For each finding, assign a confidence score from 1-10:
-> - 1-3: Low confidence, likely false positive or noise
-> - 4-6: Medium confidence, needs investigation
-> - 7-10: High confidence, likely true vulnerability
+> Confidence gate (map onto preflight tiers):
+> - Would have been 7-10 ("likely true vulnerability") → `must_fix` with `code_cited` or `doc_cited` evidence.
+> - Would have been 4-6 ("needs investigation") → `should_fix` or `nice_fix` depending on potential impact; if the only evidence is judgment, set `evidence_source: reasoning` — the synthesizer will downgrade MUST → SHOULD automatically.
+> - Would have been 1-3 ("likely noise") → do not report.
 
 ---
 
@@ -175,14 +170,16 @@ Return **strictly** this JSON, no prose:
 
 ```json
 {
-  "role": "<name>",
+  "role": "security",
   "verdict": "APPROVE" | "REVISE" | "REJECT",
-  "must_fix":   [{"title": "...", "evidence": "...", "replacement": "..."}],
-  "should_fix": [{"title": "...", "evidence": "...", "replacement": "..."}],
-  "nice_fix":   [{"title": "...", "evidence": "...", "replacement": "..."}],
+  "must_fix":   [{"title": "...", "evidence": "...", "replacement": "...", "evidence_source": "code_cited"}],
+  "should_fix": [{"title": "...", "evidence": "...", "replacement": "...", "evidence_source": "code_cited"}],
+  "nice_fix":   [{"title": "...", "evidence": "...", "replacement": "...", "evidence_source": "reasoning"}],
   "out_of_scope": [{"topic": "...", "owner_role": "..."}]
 }
 ```
+
+`evidence_source` is required on every finding per `schemas/expert-report.json`; values: `code_cited`, `doc_cited`, `artifact_cited`, `reasoning`. The coordinator appends the full claim-citation discipline block to your prompt — follow it.
 
 Verdict rule:
 - `REJECT` — actively exploitable flaw or confirmed compromise; license that legally prohibits use.

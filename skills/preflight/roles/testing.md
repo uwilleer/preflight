@@ -3,7 +3,6 @@ name: testing
 when_to_pick: "Artifact describes new functionality, a bug fix, or a refactor where test strategy is not specified."
 tags: ["testing", "coverage", "edge-cases", "test-strategy", "mocking", "fixtures"]
 skip_when: "Pure infrastructure change, documentation, or the artifact already has a detailed test plan."
-model: sonnet
 context_sections: ["conventions", "architecture"]
 synced_from: https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/test-automator.md
 synced_at: 2026-04-21

@@ -3,7 +3,6 @@ name: supply-chain
 when_to_pick: "Artifact adds a new dependency, upgrades a major version, introduces a new build tool or package registry, or integrates a third-party SDK/service."
 tags: ["dependencies", "supply-chain", "licenses", "packages", "build", "third-party"]
 skip_when: "No new external dependencies added or changed. Pure internal code change. Documentation-only."
-model: sonnet
 context_sections: ["conventions", "architecture", "external_deps"]
 synced_from: ["https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/awesome-go-vet-dependency-supply-chains.md", "https://raw.githubusercontent.com/baz-scm/awesome-reviewers/main/_reviewers/ant-design-pin-ci-dependencies-securely.md"]
 synced_at: 2026-04-21
