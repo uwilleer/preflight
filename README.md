@@ -9,38 +9,38 @@ Sample output for a `users`-table sharding plan:
 ```markdown
 ## Preflight — docs/specs/2026-shard-users.md
 
-**Вердикт:** REVISE — два MUST-FIX и одно решение по миграционному окну.
+**Verdict:** REVISE — two MUST-FIX items and one decision on the migration window.
 
-### Что обязательно поправить до кода (2)
-- L42 — миграция блокирует записи на ~14 мин: `ALTER TABLE users SHARD KEY`
-  берёт ACCESS EXCLUSIVE на 50M строк
-  → split в две транзакции через `pg_repack`, либо feature-flag + dual-write период
-  <sub>подтвердили: data-model, ops-reliability</sub>
-- L78 — `user_id` в 4 downstream-сервисах хардкодится как int64; новый shard-id формат сломает
-  → compatibility-shim (старый int64 → composite) на gateway до миграции
-  <sub>подтвердили: api-design, data-model</sub>
+### Must fix before code (2)
+- L42 — migration blocks writes for ~14 min: `ALTER TABLE users SHARD KEY`
+  takes ACCESS EXCLUSIVE on 50M rows
+  → split into two transactions via `pg_repack`, or feature-flag + dual-write period
+  <sub>confirmed by: data-model, ops-reliability</sub>
+- L78 — `user_id` is hardcoded as int64 in 4 downstream services; new shard-id format will break them
+  → compatibility-shim (old int64 → composite) on gateway before migration
+  <sub>confirmed by: api-design, data-model</sub>
 
-### Решения, которые нужно принять вам (1)
-**Когда выполнять миграцию: maintenance vs blue-green?**
-- A) 30-min maintenance окно в воскресенье — простой downtime, 503 на 30 мин
-- B) Blue-green dual-write на 2 недели — без downtime, +$1.8k инфра, риск split-brain при rollback
+### Decisions you need to make (1)
+**When to run the migration: maintenance vs blue-green?**
+- A) 30-min maintenance window on Sunday — simple downtime, 503 for 30 min
+- B) Blue-green dual-write for 2 weeks — no downtime, +$1.8k infra, split-brain risk on rollback
 
-Компромисс: операционная сложность + cost vs UX и риск отката.
-**Рекомендация:** A — brief называет «cost-conscious» как success criterion;
-30 мин downtime укладывается в SLA 99.5% (3.6 ч/мес).
+Tradeoff: operational complexity + cost vs UX and rollback risk.
+**Recommendation:** A — brief names «cost-conscious» as a success criterion;
+30 min downtime fits within SLA 99.5% (3.6 h/month).
 
-### Не закрытые вопросы (1)
-- Стратегия rollback при partial-shard failure — никто не разобрал,
-  хотя ops-reliability отметил это как data-model concern.
+### Untouched concerns (1)
+- Rollback strategy on partial-shard failure — no one covered it,
+  though ops-reliability flagged it as a data-model concern.
 
 <details>
-<summary>Панель и отфильтрованное (5 экспертов, 4 отброшено как шум)</summary>
+<summary>Panel and filtered-out (5 experts, 4 discarded as noise)</summary>
 ...
 </details>
 ```
 
 Three things to notice:
-- **Cross-confirmation** (`<sub>подтвердили: ...`) — independently raised by ≥2 roles, higher confidence.
+- **Cross-confirmation** (`<sub>confirmed by: ...`) — independently raised by ≥2 roles, higher confidence.
 - **Decision cards** with explicit recommendation traceable to the brief — not "consider X".
 - **Untouched concerns** — gaps in panel coverage that single-reviewer tools fundamentally cannot produce.
 
@@ -74,7 +74,7 @@ Reload Claude Code (or start a new session). Activates on `/preflight` or natura
 /preflight resume <workspace_path>    # resume an interrupted run
 ```
 
-Or naturally: *"собери экспертов на этот дизайн"*, *"panel review before I write this"*, *"раскритикуй своё последнее предложение"*.
+Or naturally: *"assemble experts on this design"*, *"panel review before I write this"*, *"critique your last proposal"*.
 
 **What gets reviewed well:**
 - Architecture decisions, data flows, API contracts

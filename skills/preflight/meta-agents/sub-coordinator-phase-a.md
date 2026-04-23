@@ -63,7 +63,7 @@ Update `last_completed_step` at the end of each completed step.
 
 Determine `target_type` from `user_request`:
 - `file` — path on disk.
-- `chat` — a proposal made earlier in this conversation (request starts with "раскритикуй" / "review" / "this proposal" with no file path).
+- `chat` — a proposal made earlier in this conversation (request starts with "critique this" / "review" / "this proposal" with no file path).
 - `inline` — text pasted directly.
 
 Load the artifact verbatim. For `file`, Read the path. For `chat`/`inline`, the `user_request` itself is the artifact. Write `$WORKSPACE/artifact.txt` with the verbatim content.
@@ -77,9 +77,9 @@ The brief is consumed by every expert in Phase B and — via the gate render —
 **Required sections** (in this order, all mandatory):
 
 ```
-**Что ревьюим:** <artifact path or "<chat proposal>"> — <one-line what this document is>
-**Продукт:** <one line: what it does, for whom, domain/jurisdiction if regulatory>
-**Заявленное состояние:** <claims made by the artifact — every number carries its unit>
+**Reviewing:** <artifact path or "<chat proposal>"> — <one-line what this document is>
+**Product:** <one line: what it does, for whom, domain/jurisdiction if regulatory>
+**Claimed state:** <claims made by the artifact — every number carries its unit>
 **Load-bearing facts:** <3-7 invariants that, if wrong, invalidate the whole review — extracted from CODE/DOCS, not from the artifact. Each fact carries a source (file:line or URL). If extraction is skipped in step 3, write "n/a (pure architecture artifact, no code claims)">
 **Success criteria:** <what "this review succeeded" means — verifiable, 3-5 bullets>
 ```
@@ -171,7 +171,7 @@ Team entries form the base; personal entries override on conflict. Write merged 
 - Already-done scoping (tasks the plan creates that exist in the tree).
 - Unverified premises the plan depends on.
 - Roster ambiguity (Selector had a close call between two roles).
-- **Unverified deploy/remote state.** If `ground_truth.deploy_targets_unverified == true`, emit exactly one `choice` question with `evidence_path: "ground_truth.json#/deploy_keywords_matched"` and this prompt: `"План ссылается на production / rollout / <matched keywords>, но реальное состояние deploy target не проверено. Выбери: [a] запустить probe и вставить output (для SSH deploy: ssh <host> 'cd <deploy-path> && git status && git branch --show-current && git log --oneline -5'; для k8s: kubectl get deploy <name> -o wide + kubectl describe), [b] assume runtime matches local workspace (панель пометит это как MUST-FIX), [c] n/a — артефакт не про реальный deploy."` This question exists because preflight otherwise reviews a static artifact against static local state — out-of-repo drift (prod on feature branch, schema ahead, env-vars changed) cannot be detected by file_verifications alone. This is the only gate question whose sole purpose is to pull remote state into ground_truth.
+- **Unverified deploy/remote state.** If `ground_truth.deploy_targets_unverified == true`, emit exactly one `choice` question with `evidence_path: "ground_truth.json#/deploy_keywords_matched"` and this prompt: `"The plan references production / rollout / <matched keywords>, but the deploy target's actual state has not been verified. Choose: [a] run a probe and paste its output (for SSH deploy: ssh <host> 'cd <deploy-path> && git status && git branch --show-current && git log --oneline -5'; for k8s: kubectl get deploy <name> -o wide + kubectl describe), [b] assume runtime matches local workspace (panel will flag this as MUST-FIX), [c] n/a — artifact is not about a real deploy."` This question exists because preflight otherwise reviews a static artifact against static local state — out-of-repo drift (prod on feature branch, schema ahead, env-vars changed) cannot be detected by file_verifications alone. This is the only gate question whose sole purpose is to pull remote state into ground_truth. The gate renderer at step 6 can localize this prompt into the user's language (see the gate render template), but the canonical source stays English to keep roles' cross-references stable.
 
 If there are no such items, **auto-proceed**: return `gate: null`. The main session will recognize this and dispatch Phase B directly.
 
@@ -187,13 +187,13 @@ If there are no such items, **auto-proceed**: return `gate: null`. The main sess
 ```
 ## Preflight · <artifact name>
 
-Проверил код — <N> мест, где план расходится с реальностью / требует решения.
+Checked the code — <N> items where the plan diverges from reality or requires a decision.
 workspace: <relative path>  ·  details in brief.md, ground_truth.json
 
 1. <question 1 prompt — one or two sentences, plain language>
    [a] <option A — what actually happens if you pick this>
    [b] <option B>
-   (или свой ответ)
+   (or your own answer)
 
 2. <question 2 prompt>
    [a] ...
@@ -201,12 +201,12 @@ workspace: <relative path>  ·  details in brief.md, ground_truth.json
 
 3. <open question — just ask>
 
-Ответы: строкой вроде "1=a 2=b 3=подожди протестирую", или свободно.
+Answers: as a string like "1=a 2=b 3=let me test first", or free-form.
 ```
 
 No headings beyond the `##` title. No verbatim dumps of brief or ground_truth.
 
-**Pre-emit check.** Count questions. If > 5, return `{aborted: {reason: "план нуждается в итерации до ревью — <N> блокеров в gate.md"}}`. Do not run a panel against a fundamentally broken premise.
+**Pre-emit check.** Count questions. If > 5, return `{aborted: {reason: "plan needs iteration before review — <N> blockers in gate.md"}}`. Do not run a panel against a fundamentally broken premise.
 
 **Re-iteration path.** If the invocation included `gate_answers`, patch `brief.md` / `ground_truth.json` in place per answers, regenerate `gate.md` with remaining open questions (if any), and return the new gate. The main session may call you multiple times until no questions remain.
 

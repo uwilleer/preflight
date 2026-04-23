@@ -1,6 +1,6 @@
 ---
 name: preflight
-description: Use when the user wants a multi-perspective pre-write review of a plan, design spec, architecture doc, RFC, or current design conversation — BEFORE any code is written. Assembles a panel of 3-5 independent expert agents of different professions (security, performance, testing, domain-specific), runs them in parallel, and synthesizes their findings into a severity-ranked actionable report. Trigger phrases include "/preflight", "panel review", "multi-perspective review", "собери экспертов", "панель экспертов", "ревью панелью", "preflight this plan". Use INSTEAD of plan-critic when the artifact touches multiple domains (auth + perf + data) where a single contrarian reviewer would miss domain-specific blind spots. Do NOT use for code review after implementation (that's requesting-code-review), for parallel task dispatch (that's dispatching-parallel-agents), for an implementation-mode orchestrator that dispatches coding tasks (that's orchestrator), or for general codebase exploration without a panel (that's researcher).
+description: Use when the user wants a multi-perspective pre-write review of a plan, design spec, architecture doc, RFC, or current design conversation — BEFORE any code is written. Assembles a panel of 3-5 independent expert agents of different professions (security, performance, testing, domain-specific), runs them in parallel, and synthesizes their findings into a severity-ranked actionable report. Trigger phrases include "/preflight", "panel review", "multi-perspective review", "assemble the panel", "expert panel", "panel review this", "preflight this plan". Use INSTEAD of plan-critic when the artifact touches multiple domains (auth + perf + data) where a single contrarian reviewer would miss domain-specific blind spots. Do NOT use for code review after implementation (that's requesting-code-review), for parallel task dispatch (that's dispatching-parallel-agents), for an implementation-mode orchestrator that dispatches coding tasks (that's orchestrator), or for general codebase exploration without a panel (that's researcher).
 tools: Glob, Grep, Read, Bash, WebFetch, WebSearch, Agent
 ---
 
@@ -49,7 +49,7 @@ Parse the return against `schemas/phase-handoff.json#/definitions/phase_a_output
 When the user replies to the gate, parse the answer:
 
 - **Simple resolution** (`"1=a 2=b"` or natural-language picks among the offered options): write the parsed answers to `<workspace_path>/gate_answers.json` as `{questions: [{id, answer}]}`, proceed to Phase B.
-- **Abort** (user says "stop", "не надо", "отмена"): write `<workspace_path>/aborted.json` with the user's reason, stop.
+- **Abort** (user says "stop", "no", "cancel"): write `<workspace_path>/aborted.json` with the user's reason, stop.
 - **Material change to load-bearing facts** (user contradicts a fact in the brief, names a new file, says "actually X is at line Y"): re-spawn Phase A with `resume_from: <workspace_path>` and `gate_answers: <parsed answers>`. Phase A will patch `brief.md` / `ground_truth.json` and re-emit a (possibly empty) gate. Iterate until `gate == null` or user aborts.
 
 If the answer is ambiguous, ask one short clarifying question — do not guess.
@@ -107,7 +107,7 @@ When Phase C completes (you'll get a notification), parse against `schemas/phase
 
 - If `error_path` is set: surface the error path to the user as a short note. Do not retract the report — Phase C failure is non-blocking.
 - Otherwise emit `kb_summary` as a single trailing line.
-- If `polished_report_path` is set (i.e., `duck_skipped` is false), append `"полированный вариант: <polished_report_path>"`.
+- If `polished_report_path` is set (i.e., `duck_skipped` is false), append `"polished version: <polished_report_path>"`.
 
 Do not poll. The harness notifies you on completion.
 

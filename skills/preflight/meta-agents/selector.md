@@ -40,7 +40,7 @@ Return **only** this JSON, nothing else:
       "name": "oauth-specialist",
       "reason": "OAuth refresh-token rotation is a narrow specialty not covered by general security role.",
       "ad_hoc": true,
-      "inline_prompt": "Ты — OAuth specialist. Сосредоточься исключительно на spec-соответствии: RFC 6749/6819, refresh token rotation, PKCE, state/nonce, token leakage in referrer/logs. Игнорируй всё, что не OAuth."
+      "inline_prompt": "You are an OAuth specialist. Focus exclusively on spec compliance: RFC 6749/6819, refresh token rotation, PKCE, state/nonce, token leakage in referrer/logs. Ignore everything that is not OAuth."
     }
   ],
   "dropped": [

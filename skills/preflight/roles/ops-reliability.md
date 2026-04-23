@@ -35,7 +35,7 @@ Preflight reviews a static artifact against static local state. Out-of-repo drif
 Check `ground_truth.json` before writing your normal findings:
 
 1. **Auto-MUST when unverified.** If `ground_truth.deploy_targets_unverified == true` AND `deploy_not_applicable != true`, emit a `must_fix`:
-   - `title`: `"Deploy target state не проверён — rollout план строится на непроверенных допущениях"`
+   - `title`: `"Deploy target state unverified — rollout plan depends on unverified assumptions"`
    - `evidence`: cite the specific deploy-related phrases from the artifact (e.g. `git pull master`, `systemctl restart <svc>`, `canary 10%→50%→100%`). Reference `ground_truth.deploy_keywords_matched` for the exact list. If `deploy_state_assumption` is set, include: `"user chose [b] assume — risk acknowledged but not resolved"`.
    - `replacement`: `"Before executing rollout, verify remote state matches the plan. For SSH deploy: ssh <host> 'cd <deploy-path> && git status && git branch --show-current && git log --oneline -5'. For k8s: kubectl get deploy <name> -o wide && kubectl describe deploy <name>. If remote is on a different branch, has uncommitted changes, or is N commits ahead/behind, adjust the plan's merge target and rollout sequence before proceeding."`
 
