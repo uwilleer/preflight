@@ -76,7 +76,7 @@ Self-review pass (the skill ran `/preflight` on its own `SKILL.md`) surfaced sev
 
 ### Breaking changes
 - **Removed `model` from role frontmatter and `roles/index.json`.** Model choice is now per-task, made by the coordinator at dispatch time (step 7), and logged to `_index.json.dispatch[]`. Custom roles with a `model:` field will have it silently stripped on the next `make build-index` — no runtime error, but the field no longer carries meaning.
-- **Removed `Model policy` block and `Cost budget` section** from `SKILL.md`. Fixed model assignments and a hardcoded `≤ $0.15` target contradicted each other and produced unrealistic expectations (real runs under the previous rules measured at $0.40–$1.50). New anti-pattern: _"Я знаю, для этой роли всегда подходит opus/sonnet."_
+- **Removed `Model policy` block and `Cost budget` section** from `SKILL.md`. Fixed model assignments and a hardcoded `≤ $0.15` target contradicted each other and produced unrealistic expectations (real runs under the previous rules measured at $0.40–$1.50). New anti-pattern: _"I know, opus/sonnet always fits this role."_
 - **`context_pack` sizing is now proportional**, not capped at 10k tokens. Target = `max(artifact_token_count × 0.6, 6k)`, hard ceiling 40k. Truncated sections logged to `$WORKSPACE/context_pack_truncated.json`.
 - **`ExpertReport.finding_ref` must exactly match the expert's own original finding title.** The step-11 KB apply uses exact-string match against `surviving_titles` (with a first-N-word substring fallback) — synthesizer title rewrites no longer silently orphan KB candidates.
 - Dropped `BashOutput` and `AskUserQuestion` from the skill's `tools` frontmatter — they were declared but never invoked.

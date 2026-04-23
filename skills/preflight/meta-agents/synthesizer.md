@@ -57,11 +57,11 @@ A **conflict** is when two roles give directly opposing recommendations on the s
 
 For each conflict, produce a **decision card** (not a raw "role A said X, role B said Y" dump). The user must be able to read it cold and pick a side. Structure:
 
-- `question` — one sentence in plain language, framed as a choice the user actually makes ("Ставить ли rate-limit на /login?"). No jargon from expert prompts.
+- `question` — one sentence in plain language, framed as a choice the user actually makes ("Should we rate-limit /login?"). No jargon from expert prompts.
 - `options` — 2 (sometimes 3) concrete options. Each has a `label` (what you'd actually do), `consequence` (what changes for users / system / team — in human terms, not expert-ese), and `advocated_by` (role names for traceability).
-- `tradeoff` — one sentence naming the axes in conflict ("Защита от брутфорса vs латенси /login"). Not a summary of who said what.
-- `recommendation` — your pick, **grounded in the brief's success criteria or the project's conventions**, not in which expert sounded more confident. If the brief does not resolve it, write `"равновесие — решать вам"` and leave `recommended_option` null.
-- `rationale` — one short paragraph explaining WHY this recommendation follows from the brief/conventions. If you cannot cite brief or conventions, the recommendation is biased and you must downgrade to `"равновесие"`.
+- `tradeoff` — one sentence naming the axes in conflict ("Brute-force protection vs /login latency"). Not a summary of who said what.
+- `recommendation` — your pick, **grounded in the brief's success criteria or the project's conventions**, not in which expert sounded more confident. If the brief does not resolve it, write `"no clear winner — your call"` and leave `recommended_option` null.
+- `rationale` — one short paragraph explaining WHY this recommendation follows from the brief/conventions. If you cannot cite brief or conventions, the recommendation is biased and you must downgrade to `"no clear winner"`.
 
 **Unbiased recommendation rules — enforce these on yourself:**
 - A recommendation is biased if its only justification is "expert X has higher authority" or "security always wins". Strip it.
@@ -110,9 +110,9 @@ Experts copy strings verbatim from the artifact into `evidence` and `replacement
 2. **Action-first titles.** `title` is a label for the fix, not a description of the problem. Keep it ≤ 10 words and lead with location or category, not narrative.
 
    Rewrite wordy titles:
-   - `"Синтаксис resolved date: в Step 2 неверный — вернёт пустой список"` → `"L28 — опечатка в DSL: resolved date: → resolved:"`
-   - `"$top=50 без sprint-фильтра тихо truncate'ит и забивает список старыми тикетами"` → `"L12 — $top=50 без sprint-фильтра"`
-   - `"AI делает группировку post-hoc; плоский JSON-массив летит в контекст сырым"` → `"L17-26 — jq отдаёт плоский массив, группирует модель"`
+   - `"Invalid resolved date: syntax in Step 2 — returns empty list"` → `"L28 — DSL typo: resolved date: → resolved:"`
+   - `"$top=50 without sprint filter silently truncates and fills list with stale tickets"` → `"L12 — $top=50 missing sprint filter"`
+   - `"AI groups post-hoc; flat JSON array passed raw into context"` → `"L17-26 — jq returns flat array, model groups"`
 
    If an expert's original title was already short and action-first, leave it alone.
 
@@ -142,23 +142,23 @@ Return **only** this JSON:
   "nice_fix": [...],
   "decisions": [
     {
-      "question": "Ставить ли rate-limit на /login?",
+      "question": "Should we rate-limit /login?",
       "options": [
         {
-          "label": "Включить rate-limit 5 req/min per IP",
-          "consequence": "Брутфорс и credential stuffing замедляются на порядки; легитимные пользователи практически не замечают; +~1ms латенси из-за Redis-счётчика",
+          "label": "Enable rate-limit 5 req/min per IP",
+          "consequence": "Brute-force and credential stuffing slow down by orders of magnitude; legitimate users barely notice; +~1ms latency from Redis counter",
           "advocated_by": ["security"]
         },
         {
-          "label": "Не ставить rate-limit на /login",
-          "consequence": "Латенси /login остаётся минимальной; защита от брутфорса ложится на уровень WAF/Cloudflare, если он есть",
+          "label": "No rate-limit on /login",
+          "consequence": "/login latency stays minimal; brute-force protection falls to WAF/Cloudflare if present",
           "advocated_by": ["performance"]
         }
       ],
-      "tradeoff": "Защита от брутфорса vs латенси /login и зависимость от внешнего WAF.",
-      "recommendation": "Включить rate-limit 5 req/min per IP",
+      "tradeoff": "Brute-force protection vs /login latency and reliance on external WAF.",
+      "recommendation": "Enable rate-limit 5 req/min per IP",
       "recommended_option": 0,
-      "rationale": "Brief явно называет success criterion «защита от abuse без WAF»; +1ms латенси укладывается в SLO 50ms, указанный в conventions. Второй вариант требует WAF, которого в стеке нет."
+      "rationale": "Brief explicitly names 'protection from abuse without WAF' as a success criterion; +1ms latency fits the 50ms SLO stated in conventions. The second option requires a WAF that is not in the stack."
     }
   ],
   "untouched_concerns": [
@@ -187,7 +187,7 @@ Return **only** this JSON:
 
 - **Inventing findings.** If no expert raised it, it doesn't go in the report. You are a synthesizer, not a critic.
 - **Hiding conflicts.** If security and performance conflict, put it in `decisions` with both options laid out fairly — never quietly pick one side without rationale.
-- **Biased recommendations.** "Security wins by default" is bias, not analysis. If the brief doesn't resolve the tradeoff, say `"равновесие — решать вам"` and leave `recommended_option: null`.
+- **Biased recommendations.** "Security wins by default" is bias, not analysis. If the brief doesn't resolve the tradeoff, say `"no clear winner — your call"` and leave `recommended_option: null`.
 - **Collapsing all severity.** Don't promote a NICE to MUST just because two experts mentioned it. Reporter's tier wins unless cross-confirmed at higher tier.
 - **Dropping `out_of_scope` signal.** `untouched_concerns` is the single highest-value output of this synth — it's what a single-reviewer baseline (plan-critic) fundamentally cannot produce.
 - **Skipping the noise filter.** Generic best-practice findings that don't cite the artifact are pure noise; dropping them is not censorship, it's the job.

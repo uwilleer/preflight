@@ -124,62 +124,60 @@ Update `_index.json.last_completed_step = 8`.
 
 | JSON path | Markdown target |
 |---|---|
-| `synth_result.verdict` | `**Вердикт:**` line |
-| `synth_result.must_fix[]` | `### Что обязательно поправить до кода` bullets |
-| `synth_result.decisions[]` | `### Решения, которые нужно принять вам` cards |
-| `synth_result.should_fix[]` | `### Стоит учесть` bullets |
-| `synth_result.nice_fix[]` | `### Мелочи` bullets (max 3) |
-| `synth_result.untouched_concerns[]` | `### Не закрытые вопросы` bullets |
+| `synth_result.verdict` | `**Verdict:**` line |
+| `synth_result.must_fix[]` | `### Must fix before coding` bullets |
+| `synth_result.decisions[]` | `### Decisions for you to make` cards |
+| `synth_result.should_fix[]` | `### Worth considering` bullets |
+| `synth_result.nice_fix[]` | `### Minor` bullets (max 3) |
+| `synth_result.untouched_concerns[]` | `### Open questions` bullets |
 | `synth_result.panel[]` + `synth_result.dropped[]` + `synth_result.skipped_experts[]` | collapsed `<details>` at bottom |
 
-If an array is `[]`, its section does not appear — no heading, no "Нет элементов" placeholder. Silence.
+If an array is `[]`, its section does not appear — no heading, no "None" placeholder. Silence.
 
 **Report structure:**
 
 ```markdown
 ## Preflight — <artifact name>
 
-**Вердикт:** APPROVE | REVISE | REJECT — <одна строка почему>
+**Verdict:** APPROVE | REVISE | REJECT — <one-line reason>
 
-### Что обязательно поправить до кода (<N>)
+### Must fix before coding (<N>)
 - <title> — <evidence>
   → <replacement>
-  <sub>подтвердили: role1, role2</sub>   <!-- only if cross_confirmed -->
+  <sub>confirmed by: role1, role2</sub>   <!-- only if cross_confirmed -->
 
-### Решения, которые нужно принять вам (<N>)    <!-- only if decisions.length > 0 -->
+### Decisions for you to make (<N>)    <!-- only if decisions.length > 0 -->
 **<question>**
 - A) <option[0].label> — <option[0].consequence>
 - B) <option[1].label> — <option[1].consequence>
 
-Компромисс: <tradeoff>
-**Рекомендация:** <recommendation> — <rationale>
-<!-- If recommended_option is null: "Равновесие — решать вам. <rationale>" -->
+Tradeoff: <tradeoff>
+**Recommendation:** <recommendation> — <rationale>
+<!-- If recommended_option is null: "No clear winner — your call. <rationale>" -->
 
-### Стоит учесть (<N>)   <!-- only if should_fix.length > 0 -->
+### Worth considering (<N>)   <!-- only if should_fix.length > 0 -->
 - <title> — <replacement>
 
-### Мелочи (<N>)   <!-- only if nice_fix.length > 0, max 3 items -->
+### Minor (<N>)   <!-- only if nice_fix.length > 0, max 3 items -->
 - <title> — <replacement>
 
-### Не закрытые вопросы (<N>)   <!-- only if untouched_concerns.length > 0 -->
-- <topic> — никто из экспертов не разобрал, хотя <flagged_by> попросил <owner_role>
+### Open questions (<N>)   <!-- only if untouched_concerns.length > 0 -->
+- <topic> — none of the experts addressed this, though <flagged_by> flagged it for <owner_role>
 
 <details>
-<summary>Панель и отфильтрованное (N экспертов, M отброшено)</summary>
+<summary>Panel and filtered (N experts, M filtered)</summary>
 
-Эксперты: role1, role2, role3
-Пропущены: <if any>
-Отфильтровано как шум: <dropped items with reason>
+Experts: role1, role2, role3
+Skipped: <if any>
+Filtered as noise: <dropped items with reason>
 </details>
 ```
 
 **Decision-block rules** — these are the user-facing heart of the report:
 - Formulate `question` as a choice the user actually makes.
 - Each option's `consequence` describes what changes for users/system/team in plain language — no jargon inherited from expert prompts.
-- `recommendation` MUST be traceable to the brief's success criterion, a stated SLO/constraint, or a project convention. If nothing resolves the tradeoff, write "Равновесие — решать вам" and give a decision rule.
+- `recommendation` MUST be traceable to the brief's success criterion, a stated SLO/constraint, or a project convention. If nothing resolves the tradeoff, write "No clear winner — your call" and give a decision rule.
 - Never omit an option because you disagree with it.
-
-**Report language matches the artifact's language** (if brief is in Russian, report is in Russian).
 
 Write rendered markdown to `$WORKSPACE/report.md`. Update `_index.json.last_completed_step = 9`.
 
@@ -208,8 +206,8 @@ On any exception: write `$WORKSPACE/phase-b-error.json` with `{step, message, st
 - **"I have all the expert reports in context, I'll just synthesize inline instead of calling a subagent"** — THE failure mode. Inline synthesis silently drops the noise filter, the decision-card format, the unbiased-recommendation rules, the `dropped` section. The report will look fine and be wrong. Step 8 is a real `Agent` call, period.
 - **"I'll render the report from my recollection"** — no. The report is a mechanical translation of `synth_result` JSON. If you can't point to a field in `synth_result` that produced a given line, delete that line.
 - **"Dump everything the experts said so the user can decide"** — abdication, not coordination. `dropped` items stay in the collapsed `<details>`, not in the main report.
-- **"Pick the 'safe' recommendation so nobody's angry"** — recommendations grounded in "security always wins" are bias. Every recommendation traces to the brief, a constraint, or a convention — or goes to "равновесие".
-- **"Эксперт сказал факт о коде — я процитирую без проверки."** If a claim is verifiable by one `grep` in ten seconds, verify it. If the fact is in `ground_truth`, cite that. If not, grep yourself.
-- **"Артефакт меняется во время ревью."** The drift pre-check is mandatory when `$GIT_SHA` is not null, not optional.
-- **"Я знаю, для этой роли всегда подходит opus/sonnet."** Model choice is per-task at step 7 dispatch. Log to `_index.json.dispatch[]`.
-- **"Артефакт цитирует код, значит это `artifact_self`."** `artifact_self` is for claims about what the artifact itself proposes. Claims about code behaviour read through the artifact without independent grep are `artifact_code_claim` (auto-downgraded without `code_cited` cross-confirm).
+- **"Pick the 'safe' recommendation so nobody's angry"** — recommendations grounded in "security always wins" are bias. Every recommendation traces to the brief, a constraint, or a convention — or goes to "no clear winner".
+- **"The expert stated a code fact — I'll cite it without verifying."** If a claim is verifiable by one `grep` in ten seconds, verify it. If the fact is in `ground_truth`, cite that. If not, grep yourself.
+- **"The artifact changes during review."** The drift pre-check is mandatory when `$GIT_SHA` is not null, not optional.
+- **"I know opus/sonnet always fits this role."** Model choice is per-task at step 7 dispatch. Log to `_index.json.dispatch[]`.
+- **"The artifact cites code, so it's `artifact_self`."** `artifact_self` is for claims about what the artifact itself proposes. Claims about code behaviour read through the artifact without independent grep are `artifact_code_claim` (auto-downgraded without `code_cited` cross-confirm).

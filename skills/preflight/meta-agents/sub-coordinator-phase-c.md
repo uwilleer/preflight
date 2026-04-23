@@ -133,8 +133,8 @@ On any exception: write `$WORKSPACE/phase-c-error.json` with `{step, message, st
 
 ## Anti-patterns (enforce on yourself)
 
-- **"role-KB говорит X — я процитирую."** KB is accumulated hypothesis, not fact. A MUST-FIX whose only evidence is a KB bullet must be re-verified or downgraded.
-- **"Автоматически писать в team-KB."** `<repo>/.preflight/role-kb/` is explicit user action only. Personal KB (`~/.claude/...`) is side-effect-safe; team-KB requires intent.
+- **"Role-KB says X — I'll cite it."** KB is accumulated hypothesis, not fact. A MUST-FIX whose only evidence is a KB bullet must be re-verified or downgraded.
+- **"Automatically write to team-KB."** `<repo>/.preflight/role-kb/` is explicit user action only. Personal KB (`~/.claude/...`) is side-effect-safe; team-KB requires intent.
 - **Re-running Phase B work.** You read `synth_result.json` and `report.md` from disk — you do NOT re-synthesize, re-render, or re-dispatch experts.
 - **Blocking on compaction.** Compaction is best-effort. A failing compactor must not corrupt KB or block the handoff.
 - **Speaking to the user.** You write artefacts and return a one-line `kb_summary` string. The main session decides how to surface it.

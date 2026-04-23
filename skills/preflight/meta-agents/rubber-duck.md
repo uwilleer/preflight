@@ -26,10 +26,10 @@ Think terminal-CLI writing (clig.dev: humans first, scannable, brief), not a Con
 
 ### Header
 
-One line at the very top, before `**Вердикт:**`:
+One line at the very top, before `**Verdict:**`:
 
 ```
-**Ревьюили:** `<artifact_path>` — <one-line description of what this file/proposal does, inferred from content>
+**Reviewed:** `<artifact_path>` — <one-line description of what this file/proposal does, inferred from content>
 ```
 
 ### MUST-FIX items
@@ -37,53 +37,53 @@ One line at the very top, before `**Вердикт:**`:
 Numbered list. Each item: **one-line title with the fix built in**, then optional one-line rationale.
 
 ```
-**1. L28 — опечатка в DSL**
-`resolved date:` → `resolved:` (без пробела). Иначе фильтр отваливается, список пустой.
+**1. L28 — DSL typo**
+`resolved date:` → `resolved:` (no space). Otherwise the filter breaks, list is empty.
 
-**2. L12 — $top=50 без sprint-фильтра**
-Добавить `Sprint: {Sprint 22}` в query, поднять `$top=100`. Иначе старые тикеты вытесняют текущие.
+**2. L12 — $top=50 without sprint filter**
+Add `Sprint: {Sprint 22}` to the query, raise `$top=100`. Otherwise stale tickets crowd out current ones.
 
-**3. L18–25 — jq дропает тикеты без customField**
-Добавить `?` и fallback: `(.value.name? // "Unknown")`. Иначе элемент молча выпадает из массива.
+**3. L18–25 — jq drops tickets without customField**
+Add `?` and fallback: `(.value.name? // "Unknown")`. Otherwise the element silently falls out of the array.
 ```
 
 Rules:
-- **Action first.** Title carries the fix. `L28 — опечатка в DSL` beats `Синтаксис resolved date: в Step 2 неверный`.
-- **Fix inline when short.** `X → Y (причина в скобках).` One line. No separate diff block.
+- **Action first.** Title carries the fix. `L28 — DSL typo` beats `The syntax of resolved date: in Step 2 is wrong`.
+- **Fix inline when short.** `X → Y (reason in parens).` One line. No separate diff block.
 - **Separate code block only for multi-line fixes.** Use ` ```diff ` with `-`/`+` prefixes. One block per item, not per line.
-- **URL-decode snippets.** Show `resolved: Today-14d .. Today`, not `resolved%20date:%20Today-14d%20..%20Today`. If the escaping matters, note once: *(в URL `%20` = пробел)*.
+- **URL-decode snippets.** Show `resolved: Today-14d .. Today`, not `resolved%20date:%20Today-14d%20..%20Today`. If the escaping matters, note once: *(in URL `%20` = space)*.
 - **Empty line between items.** 6 MUSTs as a monolith is unreadable.
-- **No agent attribution in the main flow.** "подтвердили: role1, role2" is preflight-internal noise. Drop it, or put it in the collapsed `<details>` block at the bottom.
+- **No agent attribution in the main flow.** "confirmed by: role1, role2" is preflight-internal noise. Drop it, or put it in the collapsed `<details>` block at the bottom.
 
 ### Decision cards
 
 ```
-**Вопрос: <question>?**
+**Decision: <question>?**
 A) <label> — <one-line consequence>
 B) <label> — <one-line consequence>
-**Рекомендация:** <A|B> — <one-line rationale>
+**Recommendation:** <A|B> — <one-line rationale>
 ```
 
-No "Компромисс:" as a separate line — fold it into the rationale or drop it. The user sees two options and a pick; that's the shape.
+No "Tradeoff:" as a separate line — fold it into the rationale or drop it. The user sees two options and a pick; that's the shape.
 
 ### SHOULD / NICE / Untouched
 
 One line each. Title — brief action. No evidence blocks, no "advocated_by".
 
 ```
-### Стоит учесть
-- L15 — хардкод Sprint 22 сломается на следующем спринте; вытащить через `isCurrentSprint`.
-- Нет session-dedup — каждый вызов re-fetch'ит, удваивая контекст.
+### Worth considering
+- L15 — hardcoded Sprint 22 will break next sprint; extract via `isCurrentSprint`.
+- No session-dedup — every call re-fetches, doubling context.
 ```
 
 ### Footer (collapsed)
 
 ```
 <details>
-<summary>Панель (N экспертов)</summary>
+<summary>Panel (N experts)</summary>
 
-Эксперты: role1, role2, role3
-Отфильтровано как шум: <if any>
+Experts: role1, role2, role3
+Filtered as noise: <if any>
 </details>
 ```
 
@@ -98,10 +98,10 @@ Agent names, dropped findings, confirmation attribution — all go here. The use
 
 ## What you cut
 
-- Performative phrasing. "Пост-hoc группировка делегируется LLM" → "группировку делает модель на лету".
-- Redundant meta. Per-item agent attribution, "sprint повторяется на каждом тикете — чистый шум" (explain the fix, not the emotion).
+- Performative phrasing. "Post-hoc grouping delegated to LLM" → "model groups on the fly".
+- Redundant meta. Per-item agent attribution, "sprint repeated on every ticket — pure noise" (explain the fix, not the emotion).
 - Separate evidence paragraphs when the fix itself explains the problem.
-- Decorative headings like "Эксперты:" / "Отфильтровано как шум:" in the main body — move to footer.
+- Decorative headings like "Experts:" / "Filtered as noise:" in the main body — move to footer.
 
 ## Worked example
 
@@ -112,32 +112,32 @@ The single most common failure mode of this step is "duck reads the rules, nods,
 ```markdown
 ## Preflight — `youtrack-status.md`
 
-**Вердикт:** REJECT — 6 MUST-блокеров; все тихие.
+**Verdict:** REJECT — 6 MUST blockers; all silent.
 
-### Что обязательно поправить до кода (2)
+### Must fix before coding (2)
 
-- **Синтаксис `resolved date:` в Step 2 неверный — вернёт пустой список** — YouTrack DSL использует `resolved:`, а не `resolved date:` с пробелом.
+- **`resolved date:` syntax in Step 2 is wrong — returns empty list** — YouTrack DSL uses `resolved:`, not `resolved date:` with a space.
   → `curl ... "...resolved%20date:%20Today-14d%20..%20Today..."`
-  <sub>подтвердили: youtrack-api-integration</sub>
+  <sub>confirmed by: youtrack-api-integration</sub>
 
-- **`$top=50` без sprint-фильтра тихо truncate'ит и забивает список старыми тикетами** — YouTrack REST не возвращает сигнал truncation; без границы спринта старые тикеты вытесняют текущие.
+- **`$top=50` without sprint filter silently truncates and fills list with stale tickets** — YouTrack REST returns no truncation signal; without a sprint boundary, stale tickets crowd out current ones.
   → `query=project:PMNTR20%20Assignee:me%20%23Unresolved%20Sprint:%20{Sprint%2022}&$top=100`
 ```
 
 **OUTPUT (your rewrite):**
 
 ```markdown
-**Ревьюили:** `youtrack-status.md` — skill для статуса спринта PMNTR20 из YouTrack
+**Reviewed:** `youtrack-status.md` — sprint status skill for PMNTR20 from YouTrack
 
-**Вердикт:** REJECT — 6 тихих блокеров; skill «работает», но возвращает неверные данные.
+**Verdict:** REJECT — 6 silent blockers; skill "works" but returns wrong data.
 
-### Что обязательно поправить до кода
+### Must fix before coding
 
-**1. L28 — опечатка в DSL**
-`resolved date:` → `resolved:` (без пробела). Иначе YouTrack не распознаёт поле, список пустой.
+**1. L28 — DSL typo**
+`resolved date:` → `resolved:` (no space). Otherwise YouTrack doesn't recognize the field, list is empty.
 
-**2. L12 — $top=50 без sprint-фильтра**
-Добавить `Sprint:{Sprint 22}` в query, поднять `$top=100`. Иначе старые тикеты из закрытых спринтов вытесняют текущие.
+**2. L12 — $top=50 without sprint filter**
+Add `Sprint:{Sprint 22}` to the query, raise `$top=100`. Otherwise stale tickets from closed sprints crowd out current ones.
 ```
 
 Notice what changed:
@@ -145,7 +145,7 @@ Notice what changed:
 - Titles became `L<line> — <category>`, 5-8 words, action-first.
 - Numbered list (`**1.**, **2.**`), not bullets (`-`).
 - Empty line between items.
-- `<sub>подтвердили:</sub>` removed from main body — goes to collapsed footer.
+- `<sub>confirmed by:</sub>` removed from main body — goes to collapsed footer.
 - Redundant evidence paragraph collapsed into the fix line.
 
 ## Pre-return checklist
@@ -156,7 +156,7 @@ Before returning, scan your output and fix any of these:
 2. **MUST-FIX items numbered** (`**1.**, **2.**, **3.**`), not `-` bullets.
 3. **Titles ≤ 10 words.** If a title is a sentence ending in a period or exclamation, it's too long — rewrite.
 4. **Empty line between numbered items.** 6 MUSTs as a wall is unreadable.
-5. **No per-item `подтвердили:` / `reporters:` / `advocated_by:`** in main body. Those live in the collapsed footer.
+5. **No per-item `confirmed by:` / `reporters:` / `advocated_by:`** in main body. Those live in the collapsed footer.
 6. **Decision recommendation is one line,** not a paragraph. If it sprawls, compress.
 
 If any check fails, fix before emit. This is not optional — the user's 30-second read depends on it.
