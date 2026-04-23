@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0] — 2026-04-23
+
+Closes a class of blind-spot missed in earlier releases: preflight reviewed a static artifact against static *local* state (`git_sha`, `file_verifications`, `already_done`), but had no mechanism to surface out-of-repo drift — production on a feature branch, runtime schema ahead of migrations, env-vars changed since the last deploy. Plans referencing `rollout` / `systemctl` / `canary` / `SSH на prod` passed Phase A with no gate question about the deploy target; the first signal of mismatch arrived at `git pull master` time on the production host. This release makes the blind-spot explicit via a keyword-triggered gate question and an `ops-reliability` safety-net rule.
+
+### Added
+- **`ground_truth.deploy_targets_unverified`** — new boolean field, populated in Phase A step 4. `true` when the artifact's text matches any of `rollout`, `deploy`, `systemctl`, `systemd`, `production`, `prod/`, `canary`, `ssh `, `git pull`, `kubectl`, `helm`, `docker compose` AND no probe output is supplied. Matched keywords recorded in `ground_truth.deploy_keywords_matched` for expert citation.
+- **`ground_truth.deploy_probe`** (optional) — populated when the user answers `[a]` to the deploy-state gate with SSH / kubectl / docker probe output. Shape: `{output: "<verbatim>", received_at_iso: "..."}`.
+- **`ground_truth.deploy_state_assumption`** (optional) — populated when the user answers `[b] assume` to the deploy-state gate. Flag remains `deploy_targets_unverified: true` so the ops-reliability auto-MUST still fires on assumed-but-unverified state.
+- **Phase A step-6 gate trigger.** When `deploy_targets_unverified == true`, Phase A now emits exactly one `choice` question with `[a] probe+paste / [b] assume (panel flags MUST) / [c] n/a`. Probe recipes included for SSH (`ssh <host> 'cd <path> && git status && git branch --show-current && git log --oneline -5'`) and k8s (`kubectl get deploy <name> -o wide`). This is the only gate question whose purpose is to pull remote state into ground_truth.
+- **`ops-reliability` safety-net rule.** New "Load-bearing deploy-state rule" block in `roles/ops-reliability.md`. Auto-`must_fix` when `deploy_targets_unverified: true` and `deploy_not_applicable != true`, with probe recipe in the `replacement`. When `deploy_probe` is present, the role now compares probe output against the plan's rollout assumptions (branch mismatch, uncommitted changes, divergence ahead/behind, service name mismatch) and emits concrete `must_fix` entries naming the specific mismatch — not "investigate", but "change step X from `pull master` to `merge prod-hotfix/*`".
+
+### Changed
+- **Phase A re-iteration handling** extended to parse three deploy-state gate answers: `[a]` pastes probe into `ground_truth.deploy_probe` and drops the flag; `[b]` keeps the flag and records `deploy_state_assumption`; `[c]` drops the flag and sets `deploy_not_applicable: true` so the auto-MUST suppresses.
+
+### Why this release
+In the v3 sell-race-fix preflight run (`.preflight/runs/20260423-0400-sell-race-fix-plan-v3/`), three gate iterations surfaced 35+ MUST-FIX findings across zombie policy, parallel execution, and alert automation — but not one touched the fact that the production host was on a feature branch when the plan assumed `pull master`. The artifact contained `canary` ×9, `rollout`, `systemctl` ×2, `SSH на prod`, `systemd/` — all the signals needed to ask. This release makes Phase A ask.
+
+### Known limitations
+- Keyword-based detection only. Plans that describe deploy work without these keywords (e.g., DB migration plans referencing runtime schema, API integration plans assuming external endpoint shape, env-var changes) are not covered. If a second instance of the class surfaces, the planned upgrade is to reshape `ground_truth` with a general `unverified_assumptions: [...]` field and a `deploy-state-verifier` ad-hoc role that enumerates out-of-repo premises across categories (deploy / DB / API / env). Deferred until evidence of a second instance.
+- The user may answer `[c] n/a` on an artifact that genuinely has deploy keywords; the rule does not second-guess the user. `deploy_not_applicable: true` suppresses the auto-MUST.
+
 ## [0.5.0] — 2026-04-23
 
 Architectural refactor: the 12-step pipeline no longer runs inline in the caller's session. `SKILL.md` is now a thin orchestration shell that dispatches three sub-coordinator subagents — Phase A (steps 0–6), Phase B (steps 7–9), Phase C (steps 10–11) — with structured JSON handoffs between them and the user gate. Main-session context per `/preflight` invocation drops from ~80–150k tokens to ~25k regardless of artifact or panel size, freeing 50–100k of working memory for the user's surrounding feature work.
