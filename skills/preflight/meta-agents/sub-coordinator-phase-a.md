@@ -118,6 +118,9 @@ Always include these three sections first:
   - `file_verifications` — for every `file:line` reference in the artifact: does the file exist? does the line count reach? is the named symbol present (grep)? If stale, record `expected: foo.py:246 — actual: function X at foo.py:217 (−29)`.
   - `already_done` — tasks the artifact plans as "create X" / "add Y" where X/Y already exists in the tree.
   - `load_bearing_facts_source` — for each fact from the brief, the exact grep output or URL+quote.
+  - `deploy_targets_unverified` — boolean. `true` if the artifact makes claims about remote/production state AND no probe output has been provided. Detect via case-insensitive match of `artifact.txt` against keywords `rollout`, `deploy`, `systemctl`, `systemd`, `production`, `prod/`, `canary`, `ssh `, `git pull`, `kubectl`, `helm`, `docker compose` (the last three as whole words; `prod/` as a path prefix; others as substrings). If any keyword matches AND `gate_answers` does not contain `deploy_probe`, set `true`. If no match OR user has already probed, set `false`. This flag drives the step-6 gate question and the `ops-reliability` expert's safety rule. Also record matched keywords in `deploy_keywords_matched: [...]` for the expert to cite.
+  - `deploy_probe` (optional) — only present after the user pastes probe output in gate answer `[a]`. Shape: `{output: "<verbatim text>", received_at_iso: "..."}`. The `ops-reliability` expert compares this against the plan's rollout assumptions.
+  - `deploy_state_assumption` (optional) — only present after gate answer `[b]`. String like `"matches local workspace — user accepted MUST-FIX risk"`. The flag remains `deploy_targets_unverified: true` so ops-reliability still fires the auto-MUST.
 - **Domain sections**: `auth`, `hot_paths`, `data_flows`, `api_surface`, `storage`, `external_deps`, etc.
 
 For code-heavy targets delegate to `researcher` skill if available; otherwise Glob+Grep+Read hypothesis-first.
@@ -168,6 +171,7 @@ Team entries form the base; personal entries override on conflict. Write merged 
 - Already-done scoping (tasks the plan creates that exist in the tree).
 - Unverified premises the plan depends on.
 - Roster ambiguity (Selector had a close call between two roles).
+- **Unverified deploy/remote state.** If `ground_truth.deploy_targets_unverified == true`, emit exactly one `choice` question with `evidence_path: "ground_truth.json#/deploy_keywords_matched"` and this prompt: `"План ссылается на production / rollout / <matched keywords>, но реальное состояние deploy target не проверено. Выбери: [a] запустить probe и вставить output (для SSH deploy: ssh <host> 'cd <deploy-path> && git status && git branch --show-current && git log --oneline -5'; для k8s: kubectl get deploy <name> -o wide + kubectl describe), [b] assume runtime matches local workspace (панель пометит это как MUST-FIX), [c] n/a — артефакт не про реальный deploy."` This question exists because preflight otherwise reviews a static artifact against static local state — out-of-repo drift (prod on feature branch, schema ahead, env-vars changed) cannot be detected by file_verifications alone. This is the only gate question whose sole purpose is to pull remote state into ground_truth.
 
 If there are no such items, **auto-proceed**: return `gate: null`. The main session will recognize this and dispatch Phase B directly.
 
@@ -205,6 +209,11 @@ No headings beyond the `##` title. No verbatim dumps of brief or ground_truth.
 **Pre-emit check.** Count questions. If > 5, return `{aborted: {reason: "план нуждается в итерации до ревью — <N> блокеров в gate.md"}}`. Do not run a panel against a fundamentally broken premise.
 
 **Re-iteration path.** If the invocation included `gate_answers`, patch `brief.md` / `ground_truth.json` in place per answers, regenerate `gate.md` with remaining open questions (if any), and return the new gate. The main session may call you multiple times until no questions remain.
+
+**Deploy-state gate answer handling** (when the re-iteration answers the `deploy_targets_unverified` question):
+- `[a]` + pasted probe output → set `ground_truth.deploy_probe = {output: "<verbatim user text>", received_at_iso: "<now>"}`, set `ground_truth.deploy_targets_unverified = false`, drop the question from the regenerated gate.
+- `[b]` (assume) → keep `ground_truth.deploy_targets_unverified = true`, set `ground_truth.deploy_state_assumption = "matches local workspace — user accepted MUST-FIX risk"`, drop the question from the regenerated gate. `ops-reliability` will still fire its auto-MUST on the flag.
+- `[c]` (n/a) → set `ground_truth.deploy_targets_unverified = false` AND `ground_truth.deploy_not_applicable = true` (so the auto-MUST in `ops-reliability` does not fire), drop the question. If the artifact genuinely has deploy keywords the user may be wrong — that is their choice; do not second-guess.
 
 Update `_index.json.last_completed_step = 6`.
 
