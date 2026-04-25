@@ -1,0 +1,35 @@
+group: frontend
+matchers:
+  - "frontend"
+  - "React"
+  - "Vue"
+  - "component"
+  - "browser"
+  - "DOM"
+  - "Vite"
+  - "bundle"
+  - "client-side"
+  - "TypeScript"
+augments_roles:
+  - performance
+  - security
+  - testing
+checklist_intro: |
+  This artifact involves frontend / browser code. Walk through these
+  UA-side concerns in addition to your role's lens.
+checklist:
+  - id: bundle_impact
+    title: Does this add a dependency? What is the approximate gzipped size delta?
+    rationale: Dependencies compound — the third 50 KB library is often the one that breaks the LCP budget.
+  - id: render_path
+    title: Is the new component on the critical render path, or lazy-loaded?
+    rationale: Anything imported eagerly from a route entry blocks first paint.
+  - id: xss_surface
+    title: For any HTML/Markdown rendering, is sanitization done at render time?
+    rationale: Trusting upstream sanitization fails the day someone changes the upstream pipeline.
+  - id: accessibility_keyboard
+    title: Is the component reachable and operable via keyboard alone?
+    rationale: Mouse-only UI fails screen readers and keyboard users — both are basic compliance tier.
+  - id: state_persistence
+    title: Where does this component's state live (local / store / URL / server)?
+    rationale: Wrong state location is the root cause of "why does my filter reset on refresh" bugs.

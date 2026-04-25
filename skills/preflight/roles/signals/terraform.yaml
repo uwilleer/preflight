@@ -1,0 +1,32 @@
+group: terraform
+matchers:
+  - "Terraform"
+  - "HCL"
+  - "infrastructure as code"
+  - "IaC"
+  - "module"
+  - ".tf"
+  - "provider"
+augments_roles:
+  - ops-reliability
+  - security
+  - cost-infra
+checklist_intro: |
+  This artifact touches Terraform or infrastructure-as-code. Walk through
+  these in addition to your role's lens.
+checklist:
+  - id: state_safety
+    title: How is remote state locked, and what happens on a partial apply?
+    rationale: Local state or unlocked remote state corrupts under concurrent applies.
+  - id: drift_detection
+    title: Is there a plan/apply gap monitor, or does configuration drift live indefinitely?
+    rationale: Manual out-of-band changes are the most common source of "works in dev, fails in prod" incidents.
+  - id: blast_radius
+    title: For destructive operations, is `prevent_destroy` or equivalent lifecycle guard set?
+    rationale: A resource rename + apply without a guard silently destroys and recreates production resources.
+  - id: secret_handling
+    title: Are secrets in tfvars or in state? Are they excluded from version control?
+    rationale: Secrets in committed tfvars or in state files with open ACLs are readable by anyone with access.
+  - id: module_versioning
+    title: Are external modules pinned to a specific version, not a branch or `main`?
+    rationale: Unpinned modules pull breaking upstream changes silently on the next `terraform init`.
