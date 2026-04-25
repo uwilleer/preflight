@@ -155,12 +155,14 @@ Agent(
              conventions: <conventions section from $WORKSPACE/context_pack.json, or empty string if step 4 skipped>,
              ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check if applicable; empty object {} if step 4 skipped>,
              artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>",
-             expert_reports: <read all $WORKSPACE/expert_reports/*.json>,
+             expert_reports: <read all $WORKSPACE/expert_reports_post_adversarial/*.json if that directory exists, else $WORKSPACE/expert_reports/*.json>,
              user_language: <user_language passed to this Phase, default "English">
            })
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
 )
 ```
+
+**Source-path resolution:** if step 7.5 ran (adversarial_round.skipped == false), the `expert_reports_post_adversarial/` directory contains reports with `adversarial_responses[]`. Always read from there if it exists; the original `expert_reports/` is the fallback for runs that skipped 7.5.
 
 Choose model per-task: aligned panel with small brief → small model; large or conflicted panel with many cross-confirmations → upgrade.
 
@@ -205,12 +207,12 @@ Agent(
    - `status == "verified"`: leave tier unchanged. Add `verification: {status: "verified", note: ""}` to claim.
    - `status == "inconclusive"`: leave tier unchanged. Add `verification: {status: "inconclusive", note: "<verifier.note>"}` to claim.
 
-5. **Recompute `synth_result.verdict`** after any demotions, using same rules as synthesizer §5:
-   - REJECT if ≥1 `must_fix` with `evidence_source` other than `code_cited`, OR if must_fix count ≥3 after demotions
-   - REVISE if any must_fix remains, OR ≥2 experts returned REVISE
-   - APPROVE otherwise
+5. **Recompute verdict — downgrade-only.** Verification mini-round can only soften the verdict, never harden it. Apply ONLY these adjustments:
+   - If `synth_result.must_fix.length == 0` after demotions AND original verdict was `REVISE`: downgrade to `APPROVE`.
+   - If `synth_result.must_fix.length < 3` after demotions AND original verdict was `REJECT`: downgrade to `REVISE`.
+   - In all other cases, leave verdict unchanged.
 
-   In practice: if a MUST was demoted to SHOULD, re-check if remaining MUST count justifies REJECT or REVISE.
+   Do NOT introduce new REJECT conditions. Synthesizer §5 already factored expert verdicts and pre-demotion MUST counts; verification only adjusts for demotion arithmetic. `artifact_self`, `doc_cited`, and verified `artifact_code_claim` MUSTs are legitimate — do not punish them.
 
 6. **Build summary:**
 
@@ -227,12 +229,7 @@ Agent(
 
 Write to `$WORKSPACE/verification_round.json`. Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields.
 
-7. **Renderer hook (add to step 9 render, after the existing correlated_bias_risk and evidence_thinness banners):**
-   If `verification_round.unverified > 0` AND `verification_round.skipped == false`, emit banner:
-   ```
-   > ℹ {demoted_must_to_should} вывод(а) понижены (верификатор не нашёл подтверждения в брифе). Ищите префикс «(непроверено:)» ниже.
-   ```
-   (English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.`)
+7. **Renderer hook:** see step 9's "Top-of-report warnings" block for the verification banner — it lives there alongside `correlated_bias_risk` and `evidence_thinness` warnings.
 
 Update `_index.json.last_completed_step = 8` (step 8.5 does not have its own step number — it runs as part of step 8 post-synth).
 
@@ -257,7 +254,13 @@ If `evidence_thinness >= 0.5` AND `total_findings >= 3`: prepend (or append if c
 ```
 (Translate to `user_language`. In English: `> ℹ {N}/{M} findings backed only by expert reasoning (no code/doc citation). Verify before acting.` where N = count of reasoning-source findings in must+should+nice, M = total_findings.)
 
-Both banners are informational only — they do not change the verdict or remove findings. Omit if fields are absent (old run without the flags).
+If `verification_round.unverified > 0` AND `verification_round.skipped == false`: prepend (or append after any earlier banners):
+```
+> ℹ {demoted_must_to_should} вывод(а) понижены (верификатор не нашёл подтверждения в брифе). Ищите префикс «(непроверено:)» ниже.
+```
+(Translate to `user_language`. In English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.` where N = `verification_round.demoted_must_to_should`.)
+
+All banners are informational only — they do not change the verdict or remove findings. Omit if fields are absent (old run without the flags).
 
 **Pre-render gate (run mentally first):**
 1. Do I have `synth_result` as a JSON object returned from a separate `Agent` call? If no → go back to step 8.
