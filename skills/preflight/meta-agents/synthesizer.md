@@ -233,7 +233,8 @@ Return **only** this JSON:
   "skipped_experts": [],
   "artifact_content_missing": false,
   "correlated_bias_risk": false,
-  "evidence_thinness": 0.17
+  "evidence_thinness": 0.17,
+  "disputed_findings": []
 }
 ```
 
