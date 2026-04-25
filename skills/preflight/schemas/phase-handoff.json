@@ -178,6 +178,33 @@
         },
         "error_path": { "type": ["string", "null"] }
       }
+    },
+    "synth_result": {
+      "description": "Output written to $WORKSPACE/synth_result.json by the synthesizer Agent (step 8). Phase B reads this to render report.md. All properties are documented here for reference; the synthesizer is the authoritative source of this structure.",
+      "type": "object",
+      "required": ["verdict", "panel", "must_fix", "should_fix", "nice_fix", "decisions", "untouched_concerns", "dropped", "skipped_experts"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["APPROVE", "REVISE", "REJECT"] },
+        "panel": { "type": "array", "items": { "type": "string" } },
+        "must_fix": { "type": "array" },
+        "should_fix": { "type": "array" },
+        "nice_fix": { "type": "array" },
+        "decisions": { "type": "array" },
+        "untouched_concerns": { "type": "array" },
+        "dropped": { "type": "array" },
+        "skipped_experts": { "type": "array", "items": { "type": "string" } },
+        "artifact_content_missing": { "type": "boolean" },
+        "correlated_bias_risk": {
+          "type": "boolean",
+          "description": "True when all experts agreed (no decisions, no untouched_concerns) on >=2 findings with panel size >=3. Signals possible echo-chamber."
+        },
+        "evidence_thinness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of surviving findings (must+should+nice after filters) with evidence_source==reasoning. High value means panel mostly speculated."
+        }
+      }
     }
   }
 }

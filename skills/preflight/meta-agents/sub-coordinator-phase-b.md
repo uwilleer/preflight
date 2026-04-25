@@ -117,6 +117,25 @@ Update `_index.json.last_completed_step = 8`.
 
 **The report is a pure translation of `synth_result` JSON into markdown.** You do not author it — you render it. If you write a line whose text isn't in `synth_result[i]`, stop — you're ad-libbing.
 
+**Top-of-report warnings (render before the verdict line if triggered):**
+
+Read `synth_result.correlated_bias_risk` and `synth_result.evidence_thinness` from `synth_result.json`. Compute:
+- `total_findings = synth_result.must_fix.length + synth_result.should_fix.length + synth_result.nice_fix.length`
+
+If `correlated_bias_risk == true`: prepend to report.md (above the `**Verdict:**` line):
+```
+> ⚠ Все эксперты согласились без разногласий. При высоком evidence_thinness — лишний повод проверить выводы вручную.
+```
+(Translate to `user_language`. In English: `> ⚠ All experts agreed on every finding without cross-role tension. Treat with extra skepticism — the panel may be echoing rather than reviewing.`)
+
+If `evidence_thinness >= 0.5` AND `total_findings >= 3`: prepend (or append if correlated_bias_risk banner already added):
+```
+> ℹ {N}/{M} выводов основаны только на суждении эксперта (без цитаты кода или документации). Проверьте перед действием.
+```
+(Translate to `user_language`. In English: `> ℹ {N}/{M} findings backed only by expert reasoning (no code/doc citation). Verify before acting.` where N = count of reasoning-source findings in must+should+nice, M = total_findings.)
+
+Both banners are informational only — they do not change the verdict or remove findings. Omit if fields are absent (old run without the flags).
+
 **Pre-render gate (run mentally first):**
 1. Do I have `synth_result` as a JSON object returned from a separate `Agent` call? If no → go back to step 8.
 2. Can I paste the first ~10 lines of `synth_result` verbatim as proof? If no → go back.

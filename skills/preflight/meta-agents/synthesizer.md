@@ -143,6 +143,24 @@ Keep verbatim regardless of language:
 
 If `user_language == "English"` (or absent) this step is a no-op; emit as-is. For any other language, the user reads natural prose with technical tokens unchanged. Do **not** transliterate technical tokens (`nginx-connect.conf.template:51` is not `нгинкс-…`).
 
+### 9. Anti-groupthink flags (run after output language, before emitting JSON)
+
+A panel that all agreed on a small set of low-evidence findings is more likely to be hallucinating with confidence than producing real signal. Compute two flags so the report can warn the user:
+
+1. **`correlated_bias_risk: boolean`** — emit `true` when ALL of the following hold:
+   - `decisions.length == 0` (no expert disagreed with another)
+   - `untouched_concerns.length == 0` (no role flagged something out_of_scope that the owner role missed)
+   - `must_fix.length + should_fix.length >= 2` (panel did produce findings — a silent panel is not bias, just a clean artifact)
+   - panel size >= 3 (binary panels can legitimately agree)
+
+   Otherwise emit `false`. Rationale: total agreement on multiple findings without any cross-role challenge or out_of_scope tension is the signature of a panel echo chamber. The renderer surfaces this as a top-of-report warning, not a verdict change.
+
+2. **`evidence_thinness: number`** — fraction of all surviving findings (`must_fix + should_fix + nice_fix` after noise filter and downgrades, NOT including `dropped[]`) where `evidence_source == "reasoning"`. Range `[0.0, 1.0]`, two-decimal precision.
+
+   Renderer surfaces a warning when `evidence_thinness >= 0.5` AND total findings >= 3. Below the threshold or with fewer than 3 findings, the value is informational only.
+
+Both flags are computed mechanically from data already in your hands — no new judgement required. Emit them as top-level keys in the output JSON.
+
 ## Output format (strict)
 
 Return **only** this JSON:
@@ -200,7 +218,9 @@ Return **only** this JSON:
     }
   ],
   "skipped_experts": [],
-  "artifact_content_missing": false
+  "artifact_content_missing": false,
+  "correlated_bias_risk": false,
+  "evidence_thinness": 0.17
 }
 ```
 
