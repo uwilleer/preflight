@@ -15,6 +15,25 @@ The main session appends a JSON block with:
 
 Read `$WORKSPACE/_index.json` first — it is the source of truth for `is_git`, `git_sha`, `target_type`, `scope`, and the last completed step. Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
 
+## Pre-flight: Agent tool check (run FIRST, before any step)
+
+Phase B requires the `Agent` tool at multiple steps: parallel expert dispatch (step 7), adversarial round (step 7.5), synthesizer call (step 8), and verification mini-round (step 8.5). The `general-purpose` subagent type does NOT always inherit Agent access — observed failure mode: step 7 dispatch succeeds on first spawn, but a resumed-coordinator spawn (after a stream timeout, for example) cannot reach the synthesizer because Agent is missing from its toolset.
+
+**Verify and fail loudly:**
+
+1. If `Agent` is in your default toolset, proceed to Step 7.
+2. Else run `ToolSearch("select:Agent")` to load its schema.
+3. If `ToolSearch` still returns "No matching deferred tools found", do NOT attempt inline synthesis or render-from-memory. Write `$WORKSPACE/phase-b-error.json`:
+   ```json
+   {
+     "step": 0,
+     "message": "Agent tool unavailable in this subagent context — phase B cannot dispatch experts, adversarial round, or synthesizer",
+     "trace": "ToolSearch select:Agent returned no match. General-purpose subagents do not always inherit Agent access on resume. Re-spawn phase B from a context with confirmed Agent access (typically the main session) or escalate to a subagent_type with guaranteed Agent.",
+     "partial_state": {"last_completed_step": "<from _index.json>"}
+   }
+   ```
+   Return `{workspace_path, last_completed_step: <prior>, error_path: "<abs path>"}`. The main session can re-dispatch synthesis/render itself when this happens — Phase B's contract is fail-fast, not work-around.
+
 ## Steps
 
 ### 7. Parallel dispatch
@@ -155,14 +174,14 @@ Agent(
              conventions: <conventions section from $WORKSPACE/context_pack.json, or empty string if step 4 skipped>,
              ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check if applicable; empty object {} if step 4 skipped>,
              artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>",
-             expert_reports: <read all $WORKSPACE/expert_reports_post_adversarial/*.json if that directory exists, else $WORKSPACE/expert_reports/*.json>,
+             expert_reports: <read all $WORKSPACE/expert_reports_post_adversarial/*.json if that directory exists AND contains at least one .json file, else $WORKSPACE/expert_reports/*.json>,
              user_language: <user_language passed to this Phase, default "English">
            })
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
 )
 ```
 
-**Source-path resolution:** if step 7.5 ran (adversarial_round.skipped == false), the `expert_reports_post_adversarial/` directory contains reports with `adversarial_responses[]`. Always read from there if it exists; the original `expert_reports/` is the fallback for runs that skipped 7.5.
+**Source-path resolution:** if step 7.5 ran (adversarial_round.skipped == false), the `expert_reports_post_adversarial/` directory contains reports with `adversarial_responses[]`. Always read from there if it exists AND contains at least one `.json` file; the original `expert_reports/` is the fallback for runs that skipped 7.5 OR for runs where step 7.5 began but failed before writing any post-adversarial report (observed failure mode: coordinator created the directory eagerly via mkdir but crashed before producing any output).
 
 Choose model per-task: aligned panel with small brief → small model; large or conflicted panel with many cross-confirmations → upgrade.
 

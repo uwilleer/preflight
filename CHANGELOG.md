@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.1] — 2026-04-25
+
+Closes a class of silent failures observed in a real run (weather_bot project, two preflight runs over a `chat` artifact, both fully completed but with workspace-level pathologies that produced misleading state). Two related bugs surfaced together:
+
+### Fixed
+- **Phase B/C: silent failure when `Agent` tool absent from coordinator's toolset.** Observed: `general-purpose` subagent successfully dispatches step 7 (parallel experts) on first spawn, then a stream-timeout retry re-spawns the coordinator into a context where `ToolSearch("select:Agent")` returns "No matching deferred tools found". Coordinator wrote a vague `phase-b-error.json` and returned, but the spec did not mandate the check, so the failure mode looked random ("sometimes works, sometimes doesn't"). New explicit pre-flight tool check at the top of both `sub-coordinator-phase-b.md` and `sub-coordinator-phase-c.md`: ToolSearch fallback, fail-loud error JSON, and explicit no-inline-synthesis guarantee. Phase C variant additionally short-circuits to non-error if both polish AND compaction would have been skipped anyway (so missing-Agent on a chat-artifact background spawn doesn't surface as an error).
+- **Step 8 source-path resolution: empty `expert_reports_post_adversarial/` treated as adversarial output.** Observed: workspace had the directory but no `.json` files (coordinator created the dir eagerly via mkdir, then crashed before writing any post-adversarial report). The synthesizer call's `expert_reports: <read all $WORKSPACE/expert_reports_post_adversarial/*.json if that directory exists ...>` evaluated to `[]` and synthesizer received zero expert reports. Fixed: directory-exists check now also requires the directory to contain at least one `.json` file; otherwise fall back to `expert_reports/`.
+
+### Why this release
+In a 2-hour weather_bot session two consecutive preflight runs hit the Agent-tool failure mode at different points (Phase B synth call during one run, Phase C rubber-duck in another). Manual recovery from the main session worked but only because the user happened to be the skill author and could diagnose the spec gap. The runs were "successful" by handoff JSON but produced confusing artifacts (`expert_reports_post_adversarial/` empty alongside a populated `expert_reports/`, no `synth_result.json` despite handoff claiming step 8 done). Both fixes make the failure modes loud and the spec itself self-defending against the observed harness behaviour.
+
+### Known limitations
+- The pre-flight check assumes `ToolSearch` itself is always available — true today across observed `general-purpose` spawns, but if a future harness change removes it, the coordinator has no fallback path. Re-evaluate if a regression surfaces.
+- The empty-directory fallback does not distinguish "step 7.5 was skipped" from "step 7.5 began but failed" — both fall through to `expert_reports/`. Synthesizer gets the right input regardless; the only missing signal is "did the adversarial round attempt to run?", which is recoverable by reading `adversarial_round.json` if the coordinator wrote it.
+
 ## [0.6.0] — 2026-04-23
 
 Closes a class of blind-spot missed in earlier releases: preflight reviewed a static artifact against static *local* state (`git_sha`, `file_verifications`, `already_done`), but had no mechanism to surface out-of-repo drift — production on a feature branch, runtime schema ahead of migrations, env-vars changed since the last deploy. Plans referencing `rollout` / `systemctl` / `canary` / `SSH to prod` passed Phase A with no gate question about the deploy target; the first signal of mismatch arrived at `git pull master` time on the production host. This release makes the blind-spot explicit via a keyword-triggered gate question and an `ops-reliability` safety-net rule.
