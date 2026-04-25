@@ -185,7 +185,7 @@
       }
     },
     "synth_result": {
-      "description": "Output written to $WORKSPACE/synth_result.json by the synthesizer Agent (step 8). Phase B reads this to render report.md. All properties are documented here for reference; the synthesizer is the authoritative source of this structure. correlated_bias_risk and evidence_thinness are optional (not in required[]) for backward compat — old synth_result.json from pre-port runs omit them; Phase B render hook checks for existence before rendering banners.",
+      "description": "Output written to $WORKSPACE/synth_result.json by the synthesizer Agent (step 8). Phase B reads this to render report.md. All properties are documented here for reference; the synthesizer is the authoritative source of this structure. correlated_bias_risk and evidence_thinness are optional (not in required[]) for backward compat — old synth_result.json from pre-port runs omit them; Phase B render hook checks for existence before rendering banners. Adversarial-round summary lives in $WORKSPACE/adversarial_round.json (separate file), not in this object — Phase B step 7.5 writes that file directly.",
       "type": "object",
       "required": ["verdict", "panel", "must_fix", "should_fix", "nice_fix", "decisions", "untouched_concerns", "dropped", "skipped_experts"],
       "properties": {
@@ -220,23 +220,6 @@
             "unverified": { "type": "integer", "minimum": 0 },
             "inconclusive": { "type": "integer", "minimum": 0 },
             "demoted_must_to_should": { "type": "integer", "minimum": 0 }
-          }
-        },
-        "findings_with_verification": {
-          "type": "boolean",
-          "description": "True when per-claim verification fields were added to must_fix/should_fix items."
-        },
-        "adversarial_round": {
-          "type": "object",
-          "description": "Summary written by Phase B step 7.5. Absent on old runs or when skipped.",
-          "properties": {
-            "skipped": { "type": "boolean" },
-            "reason": { "type": "string" },
-            "panel_size": { "type": "integer" },
-            "concede_count": { "type": "integer" },
-            "challenge_count": { "type": "integer" },
-            "refine_count": { "type": "integer" },
-            "pass_count": { "type": "integer" }
           }
         },
         "disputed_findings": {
