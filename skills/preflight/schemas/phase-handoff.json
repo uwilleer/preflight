@@ -186,7 +186,7 @@
       "properties": {
         "verdict": { "type": "string", "enum": ["APPROVE", "REVISE", "REJECT"] },
         "panel": { "type": "array", "items": { "type": "string" } },
-        "must_fix": { "type": "array" },
+        "must_fix": { "type": "array", "description": "Each item may carry optional verification: {status: verified|unverified|inconclusive, note: string} after step 8.5." },
         "should_fix": { "type": "array" },
         "nice_fix": { "type": "array" },
         "decisions": { "type": "array" },
@@ -203,6 +203,23 @@
           "minimum": 0,
           "maximum": 1,
           "description": "Fraction of surviving findings (must+should+nice after filters) with evidence_source==reasoning. High value means panel mostly speculated."
+        },
+        "verification_round": {
+          "type": "object",
+          "description": "Summary written by Phase B step 8.5. Absent on old runs or when skipped.",
+          "properties": {
+            "skipped": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "checked": { "type": "integer", "minimum": 0 },
+            "verified": { "type": "integer", "minimum": 0 },
+            "unverified": { "type": "integer", "minimum": 0 },
+            "inconclusive": { "type": "integer", "minimum": 0 },
+            "demoted_must_to_should": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "findings_with_verification": {
+          "type": "boolean",
+          "description": "True when per-claim verification fields were added to must_fix/should_fix items."
         }
       }
     }

@@ -113,6 +113,74 @@ Save synthesizer output to `$WORKSPACE/synth_result.json`. If the synthesizer re
 
 Update `_index.json.last_completed_step = 8`.
 
+### 8.5 — Verification mini-round (gated)
+
+**Skip condition:** if ALL `must_fix` items in `synth_result.must_fix` have `evidence_source == "code_cited"`, skip entirely. Set `verification_round: {skipped: true, reason: "all must_fix have code_cited", checked: 0, verified: 0, unverified: 0, inconclusive: 0, demoted_must_to_should: 0}` in the workspace state and proceed to step 9.
+
+**Otherwise:**
+
+1. **Build the verification batch:** collect every item from `synth_result.must_fix` AND `synth_result.should_fix` where `evidence_source ∈ {"reasoning", "artifact_self", "artifact_code_claim", "doc_cited"}`. Cap at 12 items (largest-panel runs produce >12 items; the noise filter already pruned them so any 12 are representative).
+
+2. **Extract brief_excerpt per claim:** for each claim, find the 500-char window of `brief.md` most likely cited by `claim.evidence` (keyword overlap, or the first 500 chars as fallback when evidence is abstract).
+
+3. **Spawn verifiers in parallel (single message, N Agent calls):**
+
+```
+Agent(
+  subagent_type: general-purpose,
+  model: haiku,
+  description: "Preflight verify claim: <claim.title[:40]>",
+  prompt: <full content of skills/preflight/meta-agents/verifier.md>
+         + "\n\n## Inputs\n\n"
+         + JSON.stringify({
+             claim: { title, evidence, replacement, evidence_source },
+             ground_truth: <from $WORKSPACE/ground_truth.json, or {} if absent>,
+             brief_excerpt: <500-char excerpt>,
+             user_language: <user_language>
+           })
+         + "\n\nReturn ONLY the JSON object specified in the output format section."
+)
+```
+
+4. **Collect results. For each claim:**
+   - `status == "unverified"`:
+     - If claim was in `must_fix`: move to `should_fix`, prepend `"(непроверено: <verifier.note>) "` to title (in English: `"(unverified: <note>) "`). Translate prefix to `user_language`.
+     - If already in `should_fix`: leave tier, prepend same prefix.
+     - Add `verification: {status: "unverified", note: "<verifier.note>"}` to the claim object.
+   - `status == "verified"`: leave tier unchanged. Add `verification: {status: "verified", note: ""}` to claim.
+   - `status == "inconclusive"`: leave tier unchanged. Add `verification: {status: "inconclusive", note: "<verifier.note>"}` to claim.
+
+5. **Recompute `synth_result.verdict`** after any demotions, using same rules as synthesizer §5:
+   - REJECT if ≥1 `must_fix` with `evidence_source` other than `code_cited`, OR if must_fix count ≥3 after demotions
+   - REVISE if any must_fix remains, OR ≥2 experts returned REVISE
+   - APPROVE otherwise
+
+   In practice: if a MUST was demoted to SHOULD, re-check if remaining MUST count justifies REJECT or REVISE.
+
+6. **Build summary:**
+
+```json
+{
+  "skipped": false,
+  "checked": 7,
+  "verified": 4,
+  "unverified": 2,
+  "inconclusive": 1,
+  "demoted_must_to_should": 2
+}
+```
+
+Write to `$WORKSPACE/verification_round.json`. Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields.
+
+7. **Renderer hook (add to step 9 render, after the existing correlated_bias_risk and evidence_thinness banners):**
+   If `verification_round.unverified > 0` AND `verification_round.skipped == false`, emit banner:
+   ```
+   > ℹ {demoted_must_to_should} вывод(а) понижены (верификатор не нашёл подтверждения в брифе). Ищите префикс «(непроверено:)» ниже.
+   ```
+   (English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.`)
+
+Update `_index.json.last_completed_step = 8` (step 8.5 does not have its own step number — it runs as part of step 8 post-synth).
+
 ### 9. Render report
 
 **The report is a pure translation of `synth_result` JSON into markdown.** You do not author it — you render it. If you write a line whose text isn't in `synth_result[i]`, stop — you're ad-libbing.
