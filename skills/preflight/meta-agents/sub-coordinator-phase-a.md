@@ -163,6 +163,33 @@ For each `chosen[i].name` in `roster.json`, merge two layers:
 
 Team entries form the base; personal entries override on conflict. Write merged result to `$WORKSPACE/role_kb/<role>.md`. If both files are absent, write an empty file so Phase B can reference it unconditionally. Never load KB for roles in `dropped` — wasteful.
 
+**Signal augmentation (after standard role-KB build):**
+
+If `signals` (from `$WORKSPACE/signals.json`) is non-empty:
+
+1. Load each `skills/preflight/roles/signals/<group>.yaml` for every group slug in `signals[]`.
+2. For each role in the panel, find all loaded signal YAMLs whose `augments_roles` includes this role.
+3. For each matching signal YAML, append to `$WORKSPACE/role_kb/<role>.md`:
+
+```markdown
+
+---
+
+## Domain checklist: <group>
+
+<checklist_intro verbatim>
+
+Checklist items for this run:
+- **[<id>]** <title> — <rationale>
+- **[<id>]** <title> — <rationale>
+```
+
+(Repeat for each checklist item. Multiple signals layer additively — if auth and sql both augment security, both checklist blocks appear in sequence.)
+
+4. Write the selector output (including `signals`) to `$WORKSPACE/signals.json` as well as to `_index.json.signals`.
+
+If no signals matched (empty array), role-KB files are unchanged.
+
 ### 6. Human gate — emit, do not await
 
 **Do not dump brief or ground_truth into the gate.** They are on disk. The gate's job is at most 2–5 specific questions that decide whether the panel should run at all, run as-is, or run against a corrected premise. Everything else is noise.

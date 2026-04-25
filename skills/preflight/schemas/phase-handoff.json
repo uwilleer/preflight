@@ -90,6 +90,11 @@
         "error_path": {
           "type": ["string", "null"],
           "description": "Absolute path to $WORKSPACE/phase-a-error.json if an exception was raised. Main session reads, prints, and stops."
+        },
+        "signals": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Signal-group slugs detected in brief.md whose augments_roles intersect the selected panel. Written to $WORKSPACE/signals.json by Phase A step 6. Empty array when no signals match."
         }
       }
     },
