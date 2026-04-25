@@ -10,6 +10,12 @@ You are the **orchestrator** of a pre-write review. The user gives you an artifa
 
 This split exists for one reason: running the full pipeline inline burns 80–150k of main-session context per invocation (workspace files, expert reports, synthesizer JSON, render scratch). Sub-coordinator dispatch keeps your context at ~25k regardless of artifact or panel size. You are a path-passer; the subagents do the thinking.
 
+## Output language
+
+Before spawning Phase A, determine the user's working language from this session: the system prompt's language directive (e.g. "Always respond in Русский"), recent user turns, and the natural-language sections of the artifact or `/preflight` argument. Encode it as a short free-form string (`"Russian"`, `"English"`, `"German"`, …). Default to `"English"` if the signal is absent or mixed. Pass this string as `user_language` in the JSON input to every phase.
+
+The boundary, enforced inside sub-coordinators: machine artefacts (`brief.md`, role-KB, JSON, expert prompts) stay in English — lower tokens, more reliable expert behaviour. User-facing prose (`gate.md`, decision cards in `synth_result`, `report.md`, polished report) is rendered in `user_language`. Technical tokens — code, `file:line` refs, command syntax, JSON keys, role names, CLI flags — stay verbatim regardless of language.
+
 ## Three-phase protocol
 
 ### Phase A — init, brief, gate
@@ -26,6 +32,7 @@ Agent(
              cwd: <current working directory>,
              user_request: <verbatim /preflight argument or pasted text>,
              now_iso: <ISO-8601 timestamp at invocation>,
+             user_language: <detected user language string, e.g. "Russian" or "English">,
              resume_from: null,
              gate_answers: null
            })
@@ -66,7 +73,8 @@ Agent(
          + "\n\n## Invocation inputs\n\n"
          + JSON.stringify({
              workspace_path: <from Phase A>,
-             gate_answers_path: <"<workspace>/gate_answers.json"> | null
+             gate_answers_path: <"<workspace>/gate_answers.json"> | null,
+             user_language: <same string passed to Phase A>
            })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
 )
@@ -96,7 +104,10 @@ Agent(
   run_in_background: true,
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-c.md>
          + "\n\n## Invocation inputs\n\n"
-         + JSON.stringify({ workspace_path: <from Phase B> })
+         + JSON.stringify({
+             workspace_path: <from Phase B>,
+             user_language: <same string passed to A and B>
+           })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
 )
 ```

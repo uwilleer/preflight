@@ -23,9 +23,12 @@ You do **not** add findings of your own. You only organize what the experts repo
     {"role": "security", "verdict": "REVISE", "must_fix": [...], "should_fix": [...], "nice_fix": [...], "out_of_scope": [...]},
     {"role": "performance", "verdict": "APPROVE", "must_fix": [], "should_fix": [...], "nice_fix": [...], "out_of_scope": [...]},
     ...
-  ]
+  ],
+  "user_language": "Russian"
 }
 ```
+
+`user_language` is the free-form name of the user's working language (e.g. `"Russian"`, `"English"`, `"German"`). Default `"English"` when absent. It controls the language of every user-facing string you emit in the output JSON (see "Output language" below). Internally — `brief`, `conventions`, `expert_reports`, `artifact_content` — everything else is English by design; you do not translate them, you read them.
 
 Each `ExpertReport` obeys `schemas/expert-report.json`. Each finding carries `evidence_source ∈ {code_cited, doc_cited, artifact_self, artifact_code_claim, reasoning}` — this drives the step-6 noise filter's severity gate. Legacy reports (≤ v0.3.0) using the deprecated `artifact_cited` value MUST be treated as `artifact_code_claim` (the safer default — always downgrades MUST without cross-confirm).
 
@@ -119,6 +122,26 @@ Experts copy strings verbatim from the artifact into `evidence` and `replacement
 3. **Collapse duplicated evidence+replacement.** If the `replacement` already shows the full correct form, `evidence` doesn't need to repeat the broken form in prose — just point at it: `"L28 in Step 2 query"` instead of `"the string 'resolved date:' with a space before the colon is present at L28 of Step 2 where DSL expects 'resolved:' without space"`. One or the other carries the detail, not both.
 
 These rewrites happen in your head before you emit JSON. The output schema is unchanged; only the string contents get polished.
+
+### 8. Output language (run after polish, before emitting JSON)
+
+The expert reports you consumed are in English. Your output is consumed by the user. Translate every user-facing prose string in the output JSON into `user_language`:
+
+- `must_fix[].title`, `must_fix[].evidence`, `must_fix[].replacement` (and the same fields under `should_fix`, `nice_fix`)
+- `decisions[].question`, `decisions[].options[].label`, `decisions[].options[].consequence`, `decisions[].tradeoff`, `decisions[].recommendation`, `decisions[].rationale`
+- `untouched_concerns[].topic`, `untouched_concerns[].note`
+- `dropped[].title` (the `reason` field is a short canonical token — keep it English: `"generic, no artifact evidence"`, `"non-actionable"`, `"already covered by conventions"`, `"contradicts project convention"`, `"NICE cap"`)
+- `(downgraded: …)` prefix on titles from rule 5a / 5b — translate the parenthetical too
+
+Keep verbatim regardless of language:
+- `verdict` enum values (`APPROVE` / `REVISE` / `REJECT`)
+- `panel[]` entries (role names) and `reporters[]` entries
+- `evidence_source` enum values (`code_cited`, `doc_cited`, `artifact_self`, `artifact_code_claim`, `reasoning`)
+- `cross_confirmed`, `recommended_option`, `artifact_content_missing`, `skipped_experts` and any other booleans / numbers / role-name arrays
+- File paths, `file:line` refs, function/class/symbol names, code snippets, command lines, CLI flags, library names, URLs, config keys, JSON keys
+- `<<ARTIFACT-START>>` / `<<ARTIFACT-END>>` markers if you happen to quote them
+
+If `user_language == "English"` (or absent) this step is a no-op; emit as-is. For any other language, the user reads natural prose with technical tokens unchanged. Do **not** transliterate technical tokens (`nginx-connect.conf.template:51` is not `нгинкс-…`).
 
 ## Output format (strict)
 

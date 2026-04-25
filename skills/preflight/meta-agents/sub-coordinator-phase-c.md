@@ -10,6 +10,7 @@ You are a sub-coordinator for the preflight pipeline. Your job is steps 10 and 1
 
 The main session appends a JSON block with:
 - `workspace_path` — absolute path to `$WORKSPACE`
+- `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Forwarded to the rubber-duck so polishing preserves the language the synthesizer already rendered. KB writes (step 11) stay English regardless — KB is machine-internal accumulated knowledge for future expert runs.
 
 Read `$WORKSPACE/_index.json` first — it carries `is_git`, `git_sha`, `target_type`, `scope`, `scope_slug`. Read `$WORKSPACE/synth_result.json`, `$WORKSPACE/expert_reports/*.json`, `$WORKSPACE/report.md`, `$WORKSPACE/artifact.txt`.
 
@@ -34,7 +35,8 @@ Agent(
          + JSON.stringify({
              rendered_markdown: <read $WORKSPACE/report.md>,
              artifact_path: <_index.json.artifact_path, or "chat" / "inline" marker>,
-             artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>"
+             artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>",
+             user_language: <user_language passed to this Phase, default "English">
            })
          + "\n\nReturn ONLY the rewritten markdown. No JSON wrapper, no commentary."
 )

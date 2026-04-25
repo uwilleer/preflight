@@ -11,6 +11,7 @@ You are a sub-coordinator for the preflight pipeline. Your job is steps 7 throug
 The main session appends a JSON block with:
 - `workspace_path` — absolute path to `$WORKSPACE` from Phase A
 - `gate_answers_path` — absolute path to `gate_answers.json` if gate ran; null if Phase A auto-proceeded
+- `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Forwarded to the synthesizer (which renders user-facing strings in it) and to the step-9 renderer (which translates section heading template literals). Expert prompts stay English regardless.
 
 Read `$WORKSPACE/_index.json` first — it is the source of truth for `is_git`, `git_sha`, `target_type`, `scope`, and the last completed step. Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
 
@@ -99,7 +100,8 @@ Agent(
              conventions: <conventions section from $WORKSPACE/context_pack.json, or empty string if step 4 skipped>,
              ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check if applicable; empty object {} if step 4 skipped>,
              artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>",
-             expert_reports: <read all $WORKSPACE/expert_reports/*.json>
+             expert_reports: <read all $WORKSPACE/expert_reports/*.json>,
+             user_language: <user_language passed to this Phase, default "English">
            })
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
 )
@@ -121,6 +123,8 @@ Update `_index.json.last_completed_step = 8`.
 3. Am I about to render any heading whose corresponding JSON array is `[]`? If yes → drop the heading (empty-section policy).
 
 **Rendering rules (pure field-to-markdown mapping):**
+
+The section heading literals below (`Must fix before coding`, `Decisions for you to make`, `Worth considering`, `Minor`, `Open questions`, `**Verdict:**`, the `<details>` summary, and the `Tradeoff:` / `**Recommendation:**` / `Experts:` / `Skipped:` / `Filtered as noise:` line labels) are **template strings** — translate them to natural equivalents in `user_language` when it is not English. The `synth_result` field contents are already in `user_language` (synthesizer's job); your job is only the chrome around them. Keep the artifact name, role names, file:line refs, code snippets, and `APPROVE`/`REVISE`/`REJECT` verdict tokens verbatim.
 
 | JSON path | Markdown target |
 |---|---|

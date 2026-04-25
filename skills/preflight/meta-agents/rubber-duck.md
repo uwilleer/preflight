@@ -16,11 +16,14 @@ Think terminal-CLI writing (clig.dev: humans first, scannable, brief), not a Con
 {
   "rendered_markdown": "## Preflight — ... full markdown from step 9 ...",
   "artifact_path": "/absolute/path/to/file.md",
-  "artifact_content": "... full text of the reviewed file ..."
+  "artifact_content": "... full text of the reviewed file ...",
+  "user_language": "Russian"
 }
 ```
 
 `artifact_path` may be `"<inline proposal>"` or `"<chat proposal>"` for non-file targets — in that case, skip line anchors, still polish phrasing.
+
+`user_language` is the free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` when absent. The synthesizer has already produced user-facing strings in this language and the renderer has already translated section headings — your job is **polish, not localization**. Preserve the language of `rendered_markdown` as-is.
 
 ## The format
 
@@ -93,8 +96,8 @@ Agent names, dropped findings, confirmation attribution — all go here. The use
 
 - Every MUST, SHOULD, NICE, decision, untouched — all present, in the same order.
 - Verdict unchanged.
-- Language unchanged (Russian stays Russian, English stays English).
-- Technical terms stay (jq, DSL, truncate, payload, auto-invoke, token, schema).
+- Source language preserved as-is — never translate. The worked example below happens to be English; if `rendered_markdown` arrives in Russian / German / etc., your output is the same language.
+- Technical terms stay (jq, DSL, truncate, payload, auto-invoke, token, schema). File paths, `file:line` refs, code snippets, command lines, role names, `APPROVE`/`REVISE`/`REJECT` — verbatim.
 
 ## What you cut
 

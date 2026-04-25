@@ -12,6 +12,7 @@ The main session appends a JSON block with:
 - `cwd` — working directory for scope detection
 - `user_request` — verbatim /preflight argument (file path, chat handle, or inline text)
 - `now_iso` — ISO-8601 timestamp for deterministic workspace naming
+- `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Used at step 6 only — every other artefact (`brief.md`, `ground_truth.json`, `context_pack.json`, `roster.json`, role-KB) is English regardless.
 - `resume_from` — workspace path if resuming; else null
 - `gate_answers` — only set on re-iteration when the user's previous gate answer changed load-bearing facts
 
@@ -179,6 +180,8 @@ If there are no such items, **auto-proceed**: return `gate: null`. The main sess
 - `binary` — two options, yes/no or A/B. Use for contradictions and drop-or-keep decisions.
 - `choice` — 3–4 named options for format/scope decisions.
 - `open` — free-form.
+
+**Language.** `gate.md` and the `prompt` / `options` strings in `gate.json` are user-facing — render them in `user_language`. Keep technical tokens verbatim: file paths, `file:line` refs, command lines, JSON keys, role names, CLI flags, the `[a]` / `[b]` / `[c]` option markers, the `Answers:` example syntax. The `id`, `type`, and `evidence_path` fields are machine-internal — keep English / lowercase ASCII.
 
 **Write two files:**
 - `$WORKSPACE/gate.json` — `{questions: [{id, type, prompt, options?, evidence_path}]}` where `evidence_path` points back into `ground_truth.json` or `brief.md`.

@@ -21,6 +21,10 @@
           "type": "string",
           "description": "ISO-8601 timestamp at invocation. Phase A uses this to timestamp $WORKSPACE name deterministically."
         },
+        "user_language": {
+          "type": "string",
+          "description": "Free-form name of the user's working language (e.g. 'Russian', 'English'). Detected by the main session from the chat context. Sub-coordinator renders user-facing prose (gate.md) in this language; machine artefacts (brief.md, JSON) stay English. Default 'English' when omitted."
+        },
         "resume_from": {
           "type": ["string", "null"],
           "description": "Workspace path if user chose to resume an interrupted run; null otherwise."
@@ -98,6 +102,10 @@
         "gate_answers_path": {
           "type": ["string", "null"],
           "description": "Absolute path to gate_answers.json if gate ran; null if Phase A auto-proceeded."
+        },
+        "user_language": {
+          "type": "string",
+          "description": "Same string passed to Phase A. Phase B passes it to the synthesizer (which renders user-facing strings in this language) and uses it to translate report.md section headings. Default 'English' when omitted."
         }
       }
     },
@@ -140,7 +148,11 @@
       "required": ["workspace_path"],
       "additionalProperties": false,
       "properties": {
-        "workspace_path": { "type": "string" }
+        "workspace_path": { "type": "string" },
+        "user_language": {
+          "type": "string",
+          "description": "Same string passed to Phases A and B. Phase C forwards it to the rubber-duck so polishing preserves the language the synthesizer already rendered. Default 'English' when omitted."
+        }
       }
     },
     "phase_c_output": {
