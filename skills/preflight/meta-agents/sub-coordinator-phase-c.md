@@ -14,6 +14,26 @@ The main session appends a JSON block with:
 
 Read `$WORKSPACE/_index.json` first — it carries `is_git`, `git_sha`, `target_type`, `scope`, `scope_slug`. Read `$WORKSPACE/synth_result.json`, `$WORKSPACE/expert_reports/*.json`, `$WORKSPACE/report.md`, `$WORKSPACE/artifact.txt`.
 
+## Pre-flight: Agent tool check (run FIRST, before any step)
+
+Phase C requires the `Agent` tool to dispatch the rubber-duck (step 10, conditional) and the KB compactor (step 11, conditional). The `general-purpose` subagent type does NOT always inherit Agent access on resume / background spawn.
+
+**Verify and fail loudly:**
+
+1. If `Agent` is in your default toolset, proceed to Step 10.
+2. Else run `ToolSearch("select:Agent")` to load its schema.
+3. If `ToolSearch` still returns "No matching deferred tools found":
+   - If both polish and KB compaction would be skipped anyway (target_type ∈ {chat, inline} AND no compaction triggers), proceed — the missing tool is not load-bearing for this run.
+   - Otherwise write `$WORKSPACE/phase-c-error.json`:
+     ```json
+     {
+       "step": 0,
+       "message": "Agent tool unavailable in this subagent context — phase C cannot dispatch rubber-duck or KB compactor",
+       "trace": "ToolSearch select:Agent returned no match. Background-spawned general-purpose subagents do not always inherit Agent access. Phase C failure is non-blocking — the user already has the report from Phase B."
+     }
+     ```
+     Return `{workspace_path, last_completed_step: 9, error_path: "<abs path>"}`. The main session surfaces the error but does not retract the report.
+
 ## Steps
 
 ### 10. Polish (rubber-duck) — conditional
