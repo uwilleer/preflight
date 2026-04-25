@@ -180,7 +180,7 @@
       }
     },
     "synth_result": {
-      "description": "Output written to $WORKSPACE/synth_result.json by the synthesizer Agent (step 8). Phase B reads this to render report.md. All properties are documented here for reference; the synthesizer is the authoritative source of this structure.",
+      "description": "Output written to $WORKSPACE/synth_result.json by the synthesizer Agent (step 8). Phase B reads this to render report.md. All properties are documented here for reference; the synthesizer is the authoritative source of this structure. correlated_bias_risk and evidence_thinness are optional (not in required[]) for backward compat — old synth_result.json from pre-port runs omit them; Phase B render hook checks for existence before rendering banners.",
       "type": "object",
       "required": ["verdict", "panel", "must_fix", "should_fix", "nice_fix", "decisions", "untouched_concerns", "dropped", "skipped_experts"],
       "properties": {
