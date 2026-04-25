@@ -84,3 +84,34 @@ Output: 5 chosen (security, supply-chain, data-model, contrarian, ops-reliabilit
 ## Retry
 
 If your output doesn't parse as JSON or violates the cap (≠ 3-5 chosen), the coordinator will retry you once with the error. Fix and re-emit. No prose, no apology — just clean JSON.
+
+## Signal detection (after role selection)
+
+After selecting the panel roles, scan `brief.md` for signal-group matches. This step produces the `signals[]` list that Phase A uses to augment role-KBs.
+
+1. Load all `skills/preflight/roles/signals/*.yaml` files.
+
+2. For each YAML, check whether ANY entry in its `matchers` list matches the text of `brief.md`:
+   - Matching is case-insensitive substring search.
+   - If a matcher is wrapped in `/forward-slashes/`, treat it as a regex (JavaScript-style, case-insensitive).
+   - A YAML is matched if at least ONE matcher hits.
+
+3. For each matched YAML, intersect its `augments_roles` list with `chosen[].name` (the selected panel from your output above). If the intersection is non-empty, emit the group's `group` slug into the output `signals` array.
+
+4. Output addition — add `signals` as a top-level key alongside the existing `chosen` and `dropped`:
+
+```json
+{
+  "chosen": [
+    {"name": "security", "reason": "...", "ad_hoc": false},
+    {"name": "performance", "reason": "...", "ad_hoc": false},
+    {"name": "api-design", "reason": "...", "ad_hoc": false}
+  ],
+  "dropped": [...],
+  "signals": ["auth", "sql"]
+}
+```
+
+If no signals match, emit `"signals": []`.
+
+Do not filter matched signals based on personal judgment about relevance — the `augments_roles` ∩ `chosen[].name` intersection already ensures non-applicable groups are excluded for a given panel composition.

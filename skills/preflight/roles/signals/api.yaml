@@ -1,0 +1,32 @@
+group: api
+matchers:
+  - "REST API"
+  - "endpoint"
+  - "/api/"
+  - "GraphQL"
+  - "OpenAPI"
+  - "gRPC"
+  - "webhook"
+augments_roles:
+  - api-design
+  - security
+  - performance
+checklist_intro: |
+  This artifact defines or modifies an API. Walk through these in
+  addition to your role's lens.
+checklist:
+  - id: versioning
+    title: How does this change interact with existing API versioning?
+    rationale: A breaking change without a version bump is invisible until SDK consumers start failing.
+  - id: idempotency
+    title: For non-GET endpoints, is idempotency specified for retried requests?
+    rationale: Network retries duplicate POSTs every day — without an idempotency key, double-charge bugs are inevitable.
+  - id: pagination
+    title: For list endpoints, is pagination cursor-based, and is the cursor stable across concurrent writes?
+    rationale: Offset pagination silently skips or duplicates rows when the underlying set changes mid-iteration.
+  - id: error_envelope
+    title: Is the error response shape defined, and are status codes consistent with project conventions?
+    rationale: Inconsistent error envelopes break client error handling in ways that appear as intermittent bugs.
+  - id: rate_limit_headers
+    title: Are rate-limit headers exposed so clients can back off gracefully?
+    rationale: No headers means clients implement naive retry loops that turn into distributed denial-of-service.

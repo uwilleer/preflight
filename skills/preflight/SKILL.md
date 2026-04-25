@@ -155,7 +155,11 @@ If `last_completed_step == 11`, the run is already complete — read `report.pol
 - `meta-agents/selector.md` — role selection logic (called by Phase A)
 - `meta-agents/synthesizer.md` — dedup + severity + conflict detection (called by Phase B)
 - `meta-agents/rubber-duck.md` — final polish (called by Phase C)
+- `meta-agents/verifier.md` — single-claim Haiku verifier (called by Phase B step 8.5)
+- `meta-agents/adversarial.md` — concede/challenge/refine prompt fragment (appended to expert prompts at Phase B step 7.5)
 - `roles/*.md` — expert prompt catalog (run `make build-index` to refresh `roles/index.json`)
+- `roles/signals/*.yaml` — signal-group checklists: `auth`, `sql`, `frontend`, `terraform`, `api` — augmenters mixed into role-KB by selector + Phase A
+- `roles/signals/README.md` — signal-augmenter contract (matchers, wiring, how to add new groups)
 - `schemas/expert-report.json` — JSON-schema every expert must obey
 - `schemas/phase-handoff.json` — main-session ↔ phase handoff contract
 - Design spec: `docs/specs/2026-04-20-preflight-design.md`

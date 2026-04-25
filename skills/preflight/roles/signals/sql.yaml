@@ -1,0 +1,36 @@
+group: sql
+matchers:
+  - "SQL"
+  - "PostgreSQL"
+  - "Postgres"
+  - "MySQL"
+  - "ClickHouse"
+  - "SQLite"
+  - "query"
+  - "migration"
+  - "schema change"
+  - "JOIN"
+  - "index"
+augments_roles:
+  - security
+  - performance
+  - data-model
+checklist_intro: |
+  This artifact touches SQL or a relational database. Walk through these
+  in addition to your role's lens.
+checklist:
+  - id: parameterization
+    title: Is every query parameterized, including dynamic identifiers?
+    rationale: Dynamic table/column names cannot be parameterized — they need allowlist validation, which is forgotten 90% of the time.
+  - id: index_coverage
+    title: For new queries, is the supporting index named?
+    rationale: A new query without a named index plan is a future sequential scan waiting to matter.
+  - id: migration_locks
+    title: For schema changes, is lock behavior on the target table specified?
+    rationale: ALTER TABLE on a large table without a lock-aware migration tool blocks writes for minutes.
+  - id: backfill_safety
+    title: For new NOT NULL columns, is the backfill strategy safe under concurrent writes?
+    rationale: NOT NULL + backfill default + concurrent writes has a race window where new rows skip the default.
+  - id: tx_boundaries
+    title: Are transaction boundaries explicit and short?
+    rationale: Long transactions hold row locks and bloat dead tuples — "wrap the whole request" is rarely correct.

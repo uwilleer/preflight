@@ -66,6 +66,33 @@
           }
         }
       }
+    },
+    "adversarial_responses": {
+      "type": "array",
+      "description": "Populated during adversarial round (step 7.5). Absent in first-pass reports and on panels that skip adversarial mode.",
+      "items": {
+        "type": "object",
+        "required": ["target_finding_id", "action"],
+        "additionalProperties": false,
+        "properties": {
+          "target_finding_id": {
+            "type": "string",
+            "description": "Stable id of the peer finding: '<role>:<tier>:<index>'"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["concede", "challenge", "refine", "pass"]
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Required for challenge and refine; empty string for concede/pass."
+          },
+          "corrected_replacement": {
+            "type": "string",
+            "description": "Required for refine; empty string otherwise."
+          }
+        }
+      }
     }
   },
   "definitions": {

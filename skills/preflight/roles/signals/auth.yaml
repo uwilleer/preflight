@@ -1,0 +1,42 @@
+group: auth
+matchers:
+  - "authentication"
+  - "authorization"
+  - "OAuth"
+  - "OIDC"
+  - "JWT"
+  - "session"
+  - "login"
+  - "password"
+  - "MFA"
+  - "SSO"
+augments_roles:
+  - security
+  - api-design
+  - data-model
+checklist_intro: |
+  This artifact touches authentication or authorization. In addition to your role's
+  general lens, walk through these auth-specific failure modes — one finding is enough
+  to surface; do not pad findings with all of them.
+checklist:
+  - id: token_storage
+    title: Where do tokens / session IDs live, and is the storage threat-modeled?
+    rationale: Tokens in localStorage/JWT-in-URL/application logs are the most common quiet leak vector.
+  - id: token_lifetime
+    title: Is token TTL specified, and is rotation/revocation wired?
+    rationale: Issuance without revocation turns a single token compromise into a permanent one.
+  - id: session_fixation
+    title: Does login/logout regenerate session IDs?
+    rationale: A static session ID across the login boundary lets an attacker pre-set a victim's session.
+  - id: csrf_state
+    title: For OAuth/OIDC flows, is `state` validated and bound to the user agent?
+    rationale: Missing or unbound `state` parameter enables login CSRF attacks.
+  - id: mfa_bypass
+    title: If MFA is mentioned, are recovery and bypass paths in scope?
+    rationale: Recovery flows are where MFA is most often bypassed — ignoring them is not the same as not needing them.
+  - id: redirect_validation
+    title: Are redirect_uri / return_to URLs validated against an allowlist?
+    rationale: An open-redirect on an auth endpoint is phishing-as-a-service.
+  - id: rate_limiting
+    title: Is /login (and related endpoints) rate-limited per-IP and per-account?
+    rationale: Per-IP alone is bypassed by distributed botnets; per-account alone is a denial-of-service vector.

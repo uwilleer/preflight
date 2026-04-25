@@ -90,6 +90,11 @@
         "error_path": {
           "type": ["string", "null"],
           "description": "Absolute path to $WORKSPACE/phase-a-error.json if an exception was raised. Main session reads, prints, and stops."
+        },
+        "signals": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Signal-group slugs detected in brief.md whose augments_roles intersect the selected panel. Written to $WORKSPACE/signals.json by Phase A step 6. Empty array when no signals match."
         }
       }
     },
@@ -177,6 +182,63 @@
           "description": "One-line summary for main session to surface: 'KB applied: <role1>:+N, ... · compacted: <roles>'."
         },
         "error_path": { "type": ["string", "null"] }
+      }
+    },
+    "synth_result": {
+      "description": "Output written to $WORKSPACE/synth_result.json by the synthesizer Agent (step 8). Phase B reads this to render report.md. All properties are documented here for reference; the synthesizer is the authoritative source of this structure. correlated_bias_risk and evidence_thinness are optional (not in required[]) for backward compat — old synth_result.json from pre-port runs omit them; Phase B render hook checks for existence before rendering banners. Adversarial-round summary lives in $WORKSPACE/adversarial_round.json (separate file), not in this object — Phase B step 7.5 writes that file directly.",
+      "type": "object",
+      "required": ["verdict", "panel", "must_fix", "should_fix", "nice_fix", "decisions", "untouched_concerns", "dropped", "skipped_experts"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["APPROVE", "REVISE", "REJECT"] },
+        "panel": { "type": "array", "items": { "type": "string" } },
+        "must_fix": { "type": "array", "description": "Each item may carry optional verification: {status: verified|unverified|inconclusive, note: string} after step 8.5." },
+        "should_fix": { "type": "array" },
+        "nice_fix": { "type": "array" },
+        "decisions": { "type": "array" },
+        "untouched_concerns": { "type": "array" },
+        "dropped": { "type": "array" },
+        "skipped_experts": { "type": "array", "items": { "type": "string" } },
+        "artifact_content_missing": { "type": "boolean" },
+        "correlated_bias_risk": {
+          "type": "boolean",
+          "description": "True when all experts agreed (no decisions, no untouched_concerns) on >=2 findings with panel size >=3. Signals possible echo-chamber."
+        },
+        "evidence_thinness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of surviving findings (must+should+nice after filters) with evidence_source==reasoning. High value means panel mostly speculated."
+        },
+        "verification_round": {
+          "type": "object",
+          "description": "Summary written by Phase B step 8.5. Absent on old runs or when skipped.",
+          "properties": {
+            "skipped": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "checked": { "type": "integer", "minimum": 0 },
+            "verified": { "type": "integer", "minimum": 0 },
+            "unverified": { "type": "integer", "minimum": 0 },
+            "inconclusive": { "type": "integer", "minimum": 0 },
+            "demoted_must_to_should": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "disputed_findings": {
+          "type": "array",
+          "description": "Findings challenged in adversarial round. Populated by synthesizer §1 adversarial pass. Empty array [] on non-adversarial runs.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "original_reporter": { "type": "string" },
+              "challenger": { "type": "string" },
+              "challenger_evidence": { "type": "string" },
+              "resolution": {
+                "type": "string",
+                "enum": ["promoted_to_decision", "dropped", "noted_in_untouched"]
+              }
+            }
+          }
+        }
       }
     }
   }

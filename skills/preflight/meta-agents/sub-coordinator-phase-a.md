@@ -163,6 +163,32 @@ For each `chosen[i].name` in `roster.json`, merge two layers:
 
 Team entries form the base; personal entries override on conflict. Write merged result to `$WORKSPACE/role_kb/<role>.md`. If both files are absent, write an empty file so Phase B can reference it unconditionally. Never load KB for roles in `dropped` — wasteful.
 
+**Signal augmentation (after standard role-KB build):**
+
+The selector's returned JSON contains a `signals[]` array (alongside `chosen[]` and `dropped[]`). Read it from the in-memory selector output — do NOT read `$WORKSPACE/signals.json` first; it does not exist yet on a fresh run.
+
+1. **Persist signals first.** Extract `signals[]` from the selector's returned JSON. Write `$WORKSPACE/signals.json` with `{signals: [...], extracted_from: "roster.json", written_at: "<now_iso>"}`. Set `_index.json.signals = <signals array>`. If `signals` is missing or `[]`, write the empty form and skip the rest of this block — role-KB files are unchanged.
+
+2. **Augment role-KBs** (only when `signals[]` is non-empty):
+   - Load each `skills/preflight/roles/signals/<group>.yaml` for every group slug in `signals[]`.
+   - For each role in the panel (`chosen[].name` from `roster.json`), find all loaded signal YAMLs whose `augments_roles` includes this role.
+   - For each matching signal YAML, append to `$WORKSPACE/role_kb/<role>.md`:
+
+```markdown
+
+---
+
+## Domain checklist: <group>
+
+<checklist_intro verbatim>
+
+Checklist items for this run:
+- **[<id>]** <title> — <rationale>
+- **[<id>]** <title> — <rationale>
+```
+
+(Repeat for each checklist item. Multiple signals layer additively — if `auth` and `sql` both augment `security`, both checklist blocks appear in sequence.)
+
 ### 6. Human gate — emit, do not await
 
 **Do not dump brief or ground_truth into the gate.** They are on disk. The gate's job is at most 2–5 specific questions that decide whether the panel should run at all, run as-is, or run against a corrected premise. Everything else is noise.

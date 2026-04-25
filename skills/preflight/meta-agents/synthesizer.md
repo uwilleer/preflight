@@ -44,6 +44,19 @@ Two findings are **duplicates** if they flag the same underlying issue, even if 
 
 Merge duplicates into one entry, attribute to **all** reporting roles, keep the clearest `evidence` and `replacement`.
 
+**Adversarial pass (after dedupe, when adversarial_responses are present):**
+
+Check each expert report for an `adversarial_responses[]` field. If absent, this is a non-adversarial run or that expert failed the adversarial pass — skip. If present, for each response:
+
+- `action: "concede"` from role X toward finding F → add role X to `F.reporters[]`; set `cross_confirmed: true` on F (synthesizer treats it as a cross-confirmation). If ≥2 peers concede the same finding, consider promoting tier by one level (SHOULD → MUST only if original tier was SHOULD and both conceding roles have `evidence_source != "reasoning"`).
+- `action: "challenge"` with non-empty `evidence` → record in `disputed_findings[]` (new top-level output array, see output format). Synthesizer does NOT decide who is right — it records both sides. If the challenging role is within domain authority over the challenged finding (e.g., security challenging a performance finding about TLS overhead), promote to a `decisions[]` entry. Otherwise add to `untouched_concerns[]` with note `"challenged by <role>: <evidence>"`.
+- `action: "refine"` with non-empty `corrected_replacement` → replace `F.replacement` with `corrected_replacement`; add refining role to `F.reporters[]`.
+- `action: "pass"` → ignore.
+
+**Drop rule:** A finding with ≥2 explicit `challenge` actions (`action == "challenge"` only — `refine` indicates partial agreement and does NOT count toward the threshold) AND 0 concedes moves to `dropped[]` with reason `"challenged by ≥2 peers without concession"`. This is the anti-groupthink teeth.
+
+If no expert report has `adversarial_responses`, skip this entire block (non-adversarial run).
+
 ### 2. Cross-confirmation via `out_of_scope`
 
 Every `ExpertReport` has an `out_of_scope` array: `[{topic, owner_role}]`. These are findings the reporter recognized but delegated to another role.
@@ -73,7 +86,9 @@ For each conflict, produce a **decision card** (not a raw "role A said X, role B
 
 ### 4. Severity grouping
 
-Flatten all non-conflicting findings into three tiers: `must_fix`, `should_fix`, `nice_fix`. Use the reporter's tier unless a cross-confirmed finding should be promoted (e.g., two roles independently found it at SHOULD → still SHOULD; multiple MUST from same root → one MUST).
+Flatten all non-conflicting findings into three tiers: `must_fix`, `should_fix`, `nice_fix`. Use the reporter's tier with two narrow exceptions:
+- **Higher-tier merge.** When dedupe joins findings reported at different tiers (e.g. one role MUST, another SHOULD on the same root cause), keep the higher tier — `multiple MUST from same root → one MUST`.
+- **Adversarial concede promotion.** §1's adversarial pass may promote SHOULD→MUST when ≥2 peers concede AND both have non-`reasoning` evidence_source. This is the only path where shared-tier cross-confirm promotes; ordinary cross-confirms (two independent SHOULDs without adversarial concedes) keep the original tier.
 
 Within a tier, order: cross-confirmed first, then by number of reporting roles, then by brief-relevance.
 
@@ -143,6 +158,24 @@ Keep verbatim regardless of language:
 
 If `user_language == "English"` (or absent) this step is a no-op; emit as-is. For any other language, the user reads natural prose with technical tokens unchanged. Do **not** transliterate technical tokens (`nginx-connect.conf.template:51` is not `нгинкс-…`).
 
+### 9. Anti-groupthink flags (run after output language, before emitting JSON)
+
+A panel that all agreed on a small set of low-evidence findings is more likely to be hallucinating with confidence than producing real signal. Compute two flags so the report can warn the user:
+
+1. **`correlated_bias_risk: boolean`** — emit `true` when ALL of the following hold:
+   - `decisions.length == 0` (no expert disagreed with another)
+   - `untouched_concerns.length == 0` (no role flagged something out_of_scope that the owner role missed)
+   - `must_fix.length + should_fix.length >= 2` (panel did produce findings — a silent panel is not bias, just a clean artifact)
+   - panel size >= 3 (binary panels can legitimately agree)
+
+   Otherwise emit `false`. Rationale: total agreement on multiple findings without any cross-role challenge or out_of_scope tension is the signature of a panel echo chamber. The renderer surfaces this as a top-of-report warning, not a verdict change.
+
+2. **`evidence_thinness: number`** — fraction of all surviving findings (`must_fix + should_fix + nice_fix` after noise filter and downgrades, NOT including `dropped[]`) where `evidence_source == "reasoning"`. Range `[0.0, 1.0]`, two-decimal precision.
+
+   Renderer surfaces a warning when `evidence_thinness >= 0.5` AND total findings >= 3. Below the threshold or with fewer than 3 findings, the value is informational only.
+
+Both flags are computed mechanically from data already in your hands — no new judgement required. Emit them as top-level keys in the output JSON.
+
 ## Output format (strict)
 
 Return **only** this JSON:
@@ -200,7 +233,10 @@ Return **only** this JSON:
     }
   ],
   "skipped_experts": [],
-  "artifact_content_missing": false
+  "artifact_content_missing": false,
+  "correlated_bias_risk": false,
+  "evidence_thinness": 0.17,
+  "disputed_findings": []
 }
 ```
 
@@ -211,7 +247,7 @@ Return **only** this JSON:
 - **Inventing findings.** If no expert raised it, it doesn't go in the report. You are a synthesizer, not a critic.
 - **Hiding conflicts.** If security and performance conflict, put it in `decisions` with both options laid out fairly — never quietly pick one side without rationale.
 - **Biased recommendations.** "Security wins by default" is bias, not analysis. If the brief doesn't resolve the tradeoff, say `"no clear winner — your call"` and leave `recommended_option: null`.
-- **Collapsing all severity.** Don't promote a NICE to MUST just because two experts mentioned it. Reporter's tier wins unless cross-confirmed at higher tier.
+- **Collapsing all severity.** Don't promote a NICE to MUST just because two experts mentioned it. Reporter's tier wins, with the two exceptions documented in §4: higher-tier merge on dedupe, and §1 adversarial concede promotion (SHOULD→MUST only with ≥2 peers conceding on non-`reasoning` evidence).
 - **Dropping `out_of_scope` signal.** `untouched_concerns` is the single highest-value output of this synth — it's what a single-reviewer baseline (plan-critic) fundamentally cannot produce.
 - **Skipping the noise filter.** Generic best-practice findings that don't cite the artifact are pure noise; dropping them is not censorship, it's the job.
 - **Trusting `evidence_source: "reasoning"` for MUST-FIX.** Even a confident-sounding expert can hallucinate file paths, library behaviours, or protocol details. The downgrade rule exists because this is the observed failure mode in practice. Enforce it mechanically — do not "promote back to MUST because the expert sounded sure".

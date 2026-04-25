@@ -83,6 +83,61 @@ If an expert returns malformed JSON, retry once with a terser prompt. If retry a
 
 Update `_index.json.last_completed_step = 7`.
 
+### 7.5 — Adversarial round (gated)
+
+**Skip condition:** skip the adversarial round if ANY of:
+- Total panel size < 4
+- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 3
+- `_index.json` contains `"preflight_no_adversarial": true` (escape hatch for cost-sensitive runs)
+
+If skipped: write `$WORKSPACE/adversarial_round.json` as `{"skipped": true, "reason": "<which condition>"}` and proceed to step 8 using the original expert reports.
+
+**Otherwise:**
+
+1. **Build peer-findings batch per expert.** For each expert role in the panel:
+   - Collect `must_fix` and `should_fix` from ALL OTHER experts' reports.
+   - Assign stable ids: `"<reporter_role>:<tier>:<index>"` (e.g., `"security:must:0"`, `"performance:should:2"`).
+   - Take top 8 by tier-then-alphabetical-role order.
+   - This expert's input: `{your_prior_report: <their own report>, peer_findings: [<top 8>]}`.
+
+2. **Re-dispatch all experts in parallel (single message, N Agent calls):**
+
+```
+Agent(
+  subagent_type: general-purpose,
+  model: <same model used for this expert in step 7 — read from _index.json.dispatch[]>,
+  description: "Preflight adversarial pass: <role>",
+  prompt: <full content of roles/<role>.md OR ad-hoc role prompt from roster.json>
+         + "\n\n---\n\n"
+         + <full content of skills/preflight/meta-agents/adversarial.md>
+         + "\n\n## Adversarial round inputs\n\n"
+         + JSON.stringify({
+             your_prior_report: <expert's step-7 ExpertReport>,
+             peer_findings: [<top-8 peer findings with ids>]
+           })
+         + "\n\nAppend adversarial_responses[] to your ExpertReport JSON and return the complete updated report."
+)
+```
+
+3. **Collect post-adversarial reports.** Save each as `$WORKSPACE/expert_reports_post_adversarial/<role>.json`. If a role returns malformed JSON or times out, use the original step-7 report for that role (adversarial pass is best-effort).
+
+4. **Build summary and write `$WORKSPACE/adversarial_round.json`:**
+
+```json
+{
+  "skipped": false,
+  "panel_size": 4,
+  "concede_count": 0,
+  "challenge_count": 0,
+  "refine_count": 0,
+  "pass_count": 0
+}
+```
+
+Fill counts from all `adversarial_responses[]` across all post-adversarial reports.
+
+5. **Pass post-adversarial reports** (not pre-adversarial) into step 8 synthesis. Phase B's synthesizer call reads `$WORKSPACE/expert_reports_post_adversarial/*.json` instead of `$WORKSPACE/expert_reports/*.json` when `adversarial_round.skipped == false`.
+
 ### 8. Drift pre-check + synthesize
 
 **Drift pre-check (mandatory if step 4 ran AND `$GIT_SHA` is not null).** If `ground_truth.git_sha` is `null`, skip — nothing to compare against. Otherwise compare current `git -C "$SCOPE" rev-parse HEAD` with `ground_truth.git_sha`. If they differ, re-run `file_verifications` and `already_done` against the new HEAD, update `$WORKSPACE/ground_truth.json` (with `git_sha` bumped), set `drift_refreshed: true` in the final handoff. Pass the updated object to the synthesizer.
@@ -100,12 +155,14 @@ Agent(
              conventions: <conventions section from $WORKSPACE/context_pack.json, or empty string if step 4 skipped>,
              ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check if applicable; empty object {} if step 4 skipped>,
              artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>",
-             expert_reports: <read all $WORKSPACE/expert_reports/*.json>,
+             expert_reports: <read all $WORKSPACE/expert_reports_post_adversarial/*.json if that directory exists, else $WORKSPACE/expert_reports/*.json>,
              user_language: <user_language passed to this Phase, default "English">
            })
          + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
 )
 ```
+
+**Source-path resolution:** if step 7.5 ran (adversarial_round.skipped == false), the `expert_reports_post_adversarial/` directory contains reports with `adversarial_responses[]`. Always read from there if it exists; the original `expert_reports/` is the fallback for runs that skipped 7.5.
 
 Choose model per-task: aligned panel with small brief → small model; large or conflicted panel with many cross-confirmations → upgrade.
 
@@ -113,9 +170,97 @@ Save synthesizer output to `$WORKSPACE/synth_result.json`. If the synthesizer re
 
 Update `_index.json.last_completed_step = 8`.
 
+### 8.5 — Verification mini-round (gated)
+
+**Skip condition:** if ALL `must_fix` items in `synth_result.must_fix` have `evidence_source == "code_cited"`, skip entirely. Set `verification_round: {skipped: true, reason: "all must_fix have code_cited", checked: 0, verified: 0, unverified: 0, inconclusive: 0, demoted_must_to_should: 0}` in the workspace state and proceed to step 9.
+
+**Otherwise:**
+
+1. **Build the verification batch:** collect every item from `synth_result.must_fix` AND `synth_result.should_fix` where `evidence_source ∈ {"reasoning", "artifact_self", "artifact_code_claim", "doc_cited"}`. Cap at 12 items (largest-panel runs produce >12 items; the noise filter already pruned them so any 12 are representative).
+
+2. **Extract brief_excerpt per claim:** for each claim, find the 500-char window of `brief.md` most likely cited by `claim.evidence` (keyword overlap, or the first 500 chars as fallback when evidence is abstract).
+
+3. **Spawn verifiers in parallel (single message, N Agent calls):**
+
+```
+Agent(
+  subagent_type: general-purpose,
+  model: haiku,
+  description: "Preflight verify claim: <claim.title[:40]>",
+  prompt: <full content of skills/preflight/meta-agents/verifier.md>
+         + "\n\n## Inputs\n\n"
+         + JSON.stringify({
+             claim: { title, evidence, replacement, evidence_source },
+             ground_truth: <from $WORKSPACE/ground_truth.json, or {} if absent>,
+             brief_excerpt: <500-char excerpt>,
+             user_language: <user_language>
+           })
+         + "\n\nReturn ONLY the JSON object specified in the output format section."
+)
+```
+
+4. **Collect results. For each claim:**
+   - `status == "unverified"`:
+     - If claim was in `must_fix`: move to `should_fix`, prepend `"(непроверено: <verifier.note>) "` to title (in English: `"(unverified: <note>) "`). Translate prefix to `user_language`.
+     - If already in `should_fix`: leave tier, prepend same prefix.
+     - Add `verification: {status: "unverified", note: "<verifier.note>"}` to the claim object.
+   - `status == "verified"`: leave tier unchanged. Add `verification: {status: "verified", note: ""}` to claim.
+   - `status == "inconclusive"`: leave tier unchanged. Add `verification: {status: "inconclusive", note: "<verifier.note>"}` to claim.
+
+5. **Recompute verdict — downgrade-only.** Verification mini-round can only soften the verdict, never harden it. Apply ONLY these adjustments:
+   - If `synth_result.must_fix.length == 0` after demotions AND original verdict was `REVISE`: downgrade to `APPROVE`.
+   - If `synth_result.must_fix.length < 3` after demotions AND original verdict was `REJECT`: downgrade to `REVISE`.
+   - In all other cases, leave verdict unchanged.
+
+   Do NOT introduce new REJECT conditions. Synthesizer §5 already factored expert verdicts and pre-demotion MUST counts; verification only adjusts for demotion arithmetic. `artifact_self`, `doc_cited`, and verified `artifact_code_claim` MUSTs are legitimate — do not punish them.
+
+6. **Build summary:**
+
+```json
+{
+  "skipped": false,
+  "checked": 7,
+  "verified": 4,
+  "unverified": 2,
+  "inconclusive": 1,
+  "demoted_must_to_should": 2
+}
+```
+
+Write to `$WORKSPACE/verification_round.json`. Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields.
+
+7. **Renderer hook:** see step 9's "Top-of-report warnings" block for the verification banner — it lives there alongside `correlated_bias_risk` and `evidence_thinness` warnings.
+
+Update `_index.json.last_completed_step = 8` (step 8.5 does not have its own step number — it runs as part of step 8 post-synth).
+
 ### 9. Render report
 
 **The report is a pure translation of `synth_result` JSON into markdown.** You do not author it — you render it. If you write a line whose text isn't in `synth_result[i]`, stop — you're ad-libbing.
+
+**Top-of-report warnings (render before the verdict line if triggered):**
+
+Read `synth_result.correlated_bias_risk` and `synth_result.evidence_thinness` from `synth_result.json`. Compute:
+- `total_findings = synth_result.must_fix.length + synth_result.should_fix.length + synth_result.nice_fix.length`
+
+If `correlated_bias_risk == true`: prepend to report.md (above the `**Verdict:**` line):
+```
+> ⚠ Все эксперты согласились без разногласий. При высоком evidence_thinness — лишний повод проверить выводы вручную.
+```
+(Translate to `user_language`. In English: `> ⚠ All experts agreed on every finding without cross-role tension. Treat with extra skepticism — the panel may be echoing rather than reviewing.`)
+
+If `evidence_thinness >= 0.5` AND `total_findings >= 3`: prepend (or append if correlated_bias_risk banner already added):
+```
+> ℹ {N}/{M} выводов основаны только на суждении эксперта (без цитаты кода или документации). Проверьте перед действием.
+```
+(Translate to `user_language`. In English: `> ℹ {N}/{M} findings backed only by expert reasoning (no code/doc citation). Verify before acting.` where N = count of reasoning-source findings in must+should+nice, M = total_findings.)
+
+If `verification_round.unverified > 0` AND `verification_round.skipped == false`: prepend (or append after any earlier banners):
+```
+> ℹ {demoted_must_to_should} вывод(а) понижены (верификатор не нашёл подтверждения в брифе). Ищите префикс «(непроверено:)» ниже.
+```
+(Translate to `user_language`. In English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.` where N = `verification_round.demoted_must_to_should`.)
+
+All banners are informational only — they do not change the verdict or remove findings. Omit if fields are absent (old run without the flags).
 
 **Pre-render gate (run mentally first):**
 1. Do I have `synth_result` as a JSON object returned from a separate `Agent` call? If no → go back to step 8.
@@ -135,6 +280,7 @@ The section heading literals below (`Must fix before coding`, `Decisions for you
 | `synth_result.nice_fix[]` | `### Minor` bullets (max 3) |
 | `synth_result.untouched_concerns[]` | `### Open questions` bullets |
 | `synth_result.panel[]` + `synth_result.dropped[]` + `synth_result.skipped_experts[]` | collapsed `<details>` at bottom |
+| `synth_result.disputed_findings[]` | `### Disputed findings` section at bottom of report, above `<details>` |
 
 If an array is `[]`, its section does not appear — no heading, no "None" placeholder. Silence.
 
@@ -167,6 +313,9 @@ Tradeoff: <tradeoff>
 
 ### Open questions (<N>)   <!-- only if untouched_concerns.length > 0 -->
 - <topic> — none of the experts addressed this, though <flagged_by> flagged it for <owner_role>
+
+### Disputed findings (<N>)   <!-- only if disputed_findings.length > 0 -->
+- **<title>** — <original_reporter> reported; <challenger> challenged: <challenger_evidence> → <resolution>
 
 <details>
 <summary>Panel and filtered (N experts, M filtered)</summary>
