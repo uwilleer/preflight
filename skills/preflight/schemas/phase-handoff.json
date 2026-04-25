@@ -220,6 +220,36 @@
         "findings_with_verification": {
           "type": "boolean",
           "description": "True when per-claim verification fields were added to must_fix/should_fix items."
+        },
+        "adversarial_round": {
+          "type": "object",
+          "description": "Summary written by Phase B step 7.5. Absent on old runs or when skipped.",
+          "properties": {
+            "skipped": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "panel_size": { "type": "integer" },
+            "concede_count": { "type": "integer" },
+            "challenge_count": { "type": "integer" },
+            "refine_count": { "type": "integer" },
+            "pass_count": { "type": "integer" }
+          }
+        },
+        "disputed_findings": {
+          "type": "array",
+          "description": "Findings challenged in adversarial round. Populated by synthesizer §1 adversarial pass. Empty array [] on non-adversarial runs.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "original_reporter": { "type": "string" },
+              "challenger": { "type": "string" },
+              "challenger_evidence": { "type": "string" },
+              "resolution": {
+                "type": "string",
+                "enum": ["promoted_to_decision", "dropped", "noted_in_untouched"]
+              }
+            }
+          }
         }
       }
     }

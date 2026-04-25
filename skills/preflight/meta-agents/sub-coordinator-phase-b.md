@@ -83,6 +83,61 @@ If an expert returns malformed JSON, retry once with a terser prompt. If retry a
 
 Update `_index.json.last_completed_step = 7`.
 
+### 7.5 — Adversarial round (gated)
+
+**Skip condition:** skip the adversarial round if ANY of:
+- Total panel size < 4
+- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 3
+- `_index.json` contains `"preflight_no_adversarial": true` (escape hatch for cost-sensitive runs)
+
+If skipped: write `$WORKSPACE/adversarial_round.json` as `{"skipped": true, "reason": "<which condition>"}` and proceed to step 8 using the original expert reports.
+
+**Otherwise:**
+
+1. **Build peer-findings batch per expert.** For each expert role in the panel:
+   - Collect `must_fix` and `should_fix` from ALL OTHER experts' reports.
+   - Assign stable ids: `"<reporter_role>:<tier>:<index>"` (e.g., `"security:must:0"`, `"performance:should:2"`).
+   - Take top 8 by tier-then-alphabetical-role order.
+   - This expert's input: `{your_prior_report: <their own report>, peer_findings: [<top 8>]}`.
+
+2. **Re-dispatch all experts in parallel (single message, N Agent calls):**
+
+```
+Agent(
+  subagent_type: general-purpose,
+  model: <same model used for this expert in step 7 — read from _index.json.dispatch[]>,
+  description: "Preflight adversarial pass: <role>",
+  prompt: <full content of roles/<role>.md OR ad-hoc role prompt from roster.json>
+         + "\n\n---\n\n"
+         + <full content of skills/preflight/meta-agents/adversarial.md>
+         + "\n\n## Adversarial round inputs\n\n"
+         + JSON.stringify({
+             your_prior_report: <expert's step-7 ExpertReport>,
+             peer_findings: [<top-8 peer findings with ids>]
+           })
+         + "\n\nAppend adversarial_responses[] to your ExpertReport JSON and return the complete updated report."
+)
+```
+
+3. **Collect post-adversarial reports.** Save each as `$WORKSPACE/expert_reports_post_adversarial/<role>.json`. If a role returns malformed JSON or times out, use the original step-7 report for that role (adversarial pass is best-effort).
+
+4. **Build summary and write `$WORKSPACE/adversarial_round.json`:**
+
+```json
+{
+  "skipped": false,
+  "panel_size": 4,
+  "concede_count": 0,
+  "challenge_count": 0,
+  "refine_count": 0,
+  "pass_count": 0
+}
+```
+
+Fill counts from all `adversarial_responses[]` across all post-adversarial reports.
+
+5. **Pass post-adversarial reports** (not pre-adversarial) into step 8 synthesis. Phase B's synthesizer call reads `$WORKSPACE/expert_reports_post_adversarial/*.json` instead of `$WORKSPACE/expert_reports/*.json` when `adversarial_round.skipped == false`.
+
 ### 8. Drift pre-check + synthesize
 
 **Drift pre-check (mandatory if step 4 ran AND `$GIT_SHA` is not null).** If `ground_truth.git_sha` is `null`, skip — nothing to compare against. Otherwise compare current `git -C "$SCOPE" rev-parse HEAD` with `ground_truth.git_sha`. If they differ, re-run `file_verifications` and `already_done` against the new HEAD, update `$WORKSPACE/ground_truth.json` (with `git_sha` bumped), set `drift_refreshed: true` in the final handoff. Pass the updated object to the synthesizer.
@@ -222,6 +277,7 @@ The section heading literals below (`Must fix before coding`, `Decisions for you
 | `synth_result.nice_fix[]` | `### Minor` bullets (max 3) |
 | `synth_result.untouched_concerns[]` | `### Open questions` bullets |
 | `synth_result.panel[]` + `synth_result.dropped[]` + `synth_result.skipped_experts[]` | collapsed `<details>` at bottom |
+| `synth_result.disputed_findings[]` | `### Disputed findings` section at bottom of report, above `<details>` |
 
 If an array is `[]`, its section does not appear — no heading, no "None" placeholder. Silence.
 
@@ -254,6 +310,9 @@ Tradeoff: <tradeoff>
 
 ### Open questions (<N>)   <!-- only if untouched_concerns.length > 0 -->
 - <topic> — none of the experts addressed this, though <flagged_by> flagged it for <owner_role>
+
+### Disputed findings (<N>)   <!-- only if disputed_findings.length > 0 -->
+- **<title>** — <original_reporter> reported; <challenger> challenged: <challenger_evidence> → <resolution>
 
 <details>
 <summary>Panel and filtered (N experts, M filtered)</summary>

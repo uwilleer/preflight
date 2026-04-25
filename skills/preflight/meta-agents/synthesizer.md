@@ -44,6 +44,19 @@ Two findings are **duplicates** if they flag the same underlying issue, even if 
 
 Merge duplicates into one entry, attribute to **all** reporting roles, keep the clearest `evidence` and `replacement`.
 
+**Adversarial pass (after dedupe, when adversarial_responses are present):**
+
+Check each expert report for an `adversarial_responses[]` field. If absent, this is a non-adversarial run or that expert failed the adversarial pass — skip. If present, for each response:
+
+- `action: "concede"` from role X toward finding F → add role X to `F.reporters[]`; set `cross_confirmed: true` on F (synthesizer treats it as a cross-confirmation). If ≥2 peers concede the same finding, consider promoting tier by one level (SHOULD → MUST only if original tier was SHOULD and both conceding roles have `evidence_source != "reasoning"`).
+- `action: "challenge"` with non-empty `evidence` → record in `disputed_findings[]` (new top-level output array, see output format). Synthesizer does NOT decide who is right — it records both sides. If the challenging role is within domain authority over the challenged finding (e.g., security challenging a performance finding about TLS overhead), promote to a `decisions[]` entry. Otherwise add to `untouched_concerns[]` with note `"challenged by <role>: <evidence>"`.
+- `action: "refine"` with non-empty `corrected_replacement` → replace `F.replacement` with `corrected_replacement`; add refining role to `F.reporters[]`.
+- `action: "pass"` → ignore.
+
+**Drop rule:** A finding with ≥2 challenges (non-pass, non-concede responses) AND 0 concedes moves to `dropped[]` with reason `"challenged by ≥2 peers without concession"`. This is the anti-groupthink teeth.
+
+If no expert report has `adversarial_responses`, skip this entire block (non-adversarial run).
+
 ### 2. Cross-confirmation via `out_of_scope`
 
 Every `ExpertReport` has an `out_of_scope` array: `[{topic, owner_role}]`. These are findings the reporter recognized but delegated to another role.
