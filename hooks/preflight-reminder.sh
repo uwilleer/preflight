@@ -22,6 +22,11 @@
 #
 # Disable temporarily without touching config:
 #   PREFLIGHT_REMINDER_DISABLE=1
+#
+# Localize the reminder message:
+#   PREFLIGHT_REMINDER_MESSAGE='ваш текст с переводом строки в конце\n'
+#   (set in your shell or wrap the hook command in settings.json with
+#    "command": "PREFLIGHT_REMINDER_MESSAGE='...' bash <path>")
 
 set -uo pipefail
 
@@ -78,6 +83,7 @@ if mkdir -p "$LOG_DIR" 2>/dev/null; then
         >> "$LOG_DIR/events.jsonl" 2>/dev/null
 fi
 
-printf '🛂 /preflight was used earlier this session and Edit/Write happened since. If you extended the plan, re-run /preflight. If the task changed entirely, /clear.\n' >&2
+MSG="${PREFLIGHT_REMINDER_MESSAGE:-🛂 /preflight was used earlier this session and Edit/Write happened since. If you extended the plan, re-run /preflight. If the task changed entirely, /clear.\n}"
+printf "%b" "$MSG" >&2
 
 exit 0
