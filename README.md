@@ -66,6 +66,22 @@ ln -sf ~/programming/claude/preflight/skills/preflight ~/.claude/skills/prefligh
 
 Reload Claude Code (or start a new session). Activates on `/preflight` or natural-language triggers.
 
+### Optional: Stop-hook reminder
+
+`hooks/preflight-reminder.sh` is a Stop hook that nudges you to re-run `/preflight` when you've used it earlier in the session and `Edit/Write/NotebookEdit` happened after the last invocation. Soft reminder via stderr — no blocking, no override grammar to learn.
+
+```bash
+ln -sf ~/programming/claude/preflight/hooks/preflight-reminder.sh ~/.claude/hooks/preflight-reminder.sh
+```
+
+Then add to `~/.claude/settings.json` under `hooks.Stop`:
+
+```json
+{ "type": "command", "command": "bash /Users/<you>/.claude/hooks/preflight-reminder.sh" }
+```
+
+Disable temporarily without touching config: `PREFLIGHT_REMINDER_DISABLE=1`. Logs every firing to `~/.claude/state/preflight-reminder/events.jsonl` so you can review actual frequency before deciding whether a hard `PreToolUse` deny is justified. Soft reminder won over hard gate during the panel's own self-review of this proposal — chiefly because the override-phrase channel for a hard gate is self-defeating: the assistant reads the deny reason and learns to suggest the bypass.
+
 ## Usage
 
 ```
