@@ -3,6 +3,7 @@
 > **Revision log:**
 > - 2026-04-20 v1 — initial design from brainstorm.
 > - 2026-04-20 v2 — iterated after independent `plan-critic` pass (see "Meta-experiment log" at the bottom).
+> - 2026-04-25 v3 — updated to reflect v0.5.0–v0.6.1 architecture (three-phase split, 12-step pipeline, adversarial round, verification mini-round, Agent pre-flight checks).
 
 ## Context
 
@@ -32,42 +33,91 @@ The project lives at `~/programming/claude/preflight/`, to be published as open-
 | Prompt injection | **Defense built into every role**. Eval fixture `fixtures/injection/` — MUST pass before open-source release. |
 | Location | `~/programming/claude/preflight/` → open-source |
 
-## Architecture
+## Architecture (v0.5.0+)
 
-Two meta-agents + N experts + main coordinator.
+Three sub-coordinator subagents + N experts + thin orchestration shell. Main session context per `/preflight` invocation ≈ 25k tokens regardless of artifact or panel size (was 80–150k in v0.4.0).
 
 ```
-Main agent (steps 1-3, 6-7, 9):
-  Ingest → Brief → Context decide
-    ↓
-  Selector (meta-agent #1)         — selects 3-5 roles (catalog ∪ domain),
-                                     returns chosen + dropped with rationale
-    ↓
-  [Human gate: ok / edit / abort]  — visible-default in MVP
-    ↓
-  Parallel dispatch (step 6):
-    Expert #1 ─┐
-    Expert #2 ─┤   each receives brief + its context_pack slice + roles/<name>.md
-    Expert #3 ─┤   returns ExpertReport JSON per unified schema
-    ...       ─┘   (Haiku for most, Opus for security/contrarian)
-    ↓
-  Synthesizer (meta-agent #2)      — dedup + severity grouping + conflict detection,
-                                     consults `out_of_scope` when weighing findings
-    ↓
-  Report (main agent)              — final markdown report for the user
+Main session (SKILL.md — thin shell):
+  spawn Phase A ────────────────────────────────────────────────────┐
+                                                                     │
+Phase A (steps 0–6):                                                 │
+  0. Workspace init     — mkdir $WORKSPACE, write _index.json       │
+  1. Ingest             — target_type ∈ {file, chat, inline}        │
+  2. Brief              — brief.md = goal + success criteria        │
+  3. Context decide     — heuristic; build context_pack.md ≤10k    │
+  4. Selector           — reads brief + roles/index.json →          │
+                          roster.json (3-5 roles + dropped)         │
+  5. Role-KB load       — personal ~/.claude/preflight-kb/          │
+  6. Gate emit          — choice questions or auto-proceed          │
+  → handoff JSON ──────────────────────────────────────────────────►│
+                                                                     │
+  [Human gate: answer / abort / re-iterate]                         │
+                                                                     │
+  spawn Phase B ───────────────────────────────────────────────────►│
+                                                                     │
+Phase B (steps 7–9):                                                 │
+  7.  Parallel dispatch — N Agent calls, ExpertReport JSON          │
+  7.5 Adversarial round — each expert reviews peers' findings       │
+                          (gated: ≥2 experts AND ≥1 MUST cross-     │
+                          domain finding)                            │
+  8.  Drift pre-check   — re-hash ground_truth files; if drift →   │
+      Synthesize        — dedup + severity + conflict detection     │
+  8.5 Verification mini-round — verifiers fact-check high-stakes   │
+                          claims (gated: ≥1 finding tagged          │
+                          needs_verification AND codebase scope)    │
+  9.  Render            — structured markdown report                │
+  → handoff JSON ──────────────────────────────────────────────────►│
+                                                                     │
+  [User sees report ← this is the deliverable]                      │
+                                                                     │
+  spawn Phase C (background) ─────────────────────────────────────►│
+                                                                     │
+Phase C (steps 10–11):                                               │
+  10. Polish (rubber-duck) — conditional (not chat/inline, ≥4k)    │
+  11. KB apply + compaction — personal KB only; compact if >200 LOC│
+  → kb_summary ────────────────────────────────────────────────────►│
 ```
 
-## Pipeline — 9 steps
+## Pipeline — 12 steps (0–11)
 
-1. **Ingest** — main agent: determine `target_type` ∈ {file, chat, inline}, load the source.
-2. **Brief** — main agent: distill `brief.md` = 1 paragraph of goal + success criteria.
-3. **Context decide** — main agent (heuristic): determine whether a context pack is needed.
-4. **Context pack** (if yes) — main agent or `researcher`: sectioned `context_pack.md` ≤10k tokens with sections by tags (`auth`, `hot_paths`, `data_flows`, `api_surface`, etc.), each role then fetches only its own sections by tags.
-5. **Selector** — meta-agent #1: reads brief + `roles/index.json` + optionally context_pack → returns `roster.json`: **3-5 chosen roles** with rationale + `dropped` list with reasons. Hard cap = 5 for MVP.
-6. **Human gate** — user sees the roster + dropped, replies `ok` / `edit X→Y` / `abort`. Default in MVP — ON.
-7. **Dispatch** — main agent: N parallel `Agent` calls in one message. Expert model: Haiku, except `security` and `contrarian-strategist` — Opus.
-8. **Collect + Synthesize** — meta-agent #2: dedup, severity (MUST/SHOULD/NICE), conflicts, verdict (APPROVE/REVISE/REJECT). Uses `out_of_scope` from ExpertReport as a signal: "if role X explicitly handed a finding to role Y — that's confirmation, not noise."
-9. **Report** — main agent: structured markdown + actionable list.
+### Phase A — init, brief, gate (sub-coordinator-phase-a.md)
+
+**0. Workspace init** — create `$WORKSPACE/` under `.preflight/runs/<slug>/`, write `_index.json` with `{is_git, git_sha, target_type, scope, scope_slug, run_number}`.
+
+**1. Ingest** — determine `target_type` ∈ {file, chat, inline}, load artifact text, write `artifact.txt`, count tokens.
+
+**2. Brief** — distill `brief.md`: 1 paragraph of goal + success criteria + tech stack.
+
+**3. Context pack** (heuristic) — if file-scope target with codebase: build sectioned `context_pack.md` ≤10k tokens, sections tagged by role (`auth`, `hot_paths`, `data_flows`, etc.). Each role fetches only its declared `context_sections`.
+
+**4. Selector** — reads brief + `roles/index.json` + optionally context_pack → returns `roster.json`: 3–5 chosen roles with rationale + `dropped` list. Hard cap = 5 (MVP). Populates `ground_truth.json` including `deploy_targets_unverified` flag (v0.6.0+).
+
+**5. Role-KB load** — load personal `~/.claude/preflight-kb/<scope_slug>/<role>.md` for each selected role. KB hints are advisory only — KB bullets are hypotheses, not verified facts; must not inflate severity.
+
+**6. Gate emit** — emit `choice` questions or `info` blocks; or `null` (auto-proceed) if no ambiguities. Render emitted to main session; user answers fed back as `gate_answers.json`. `deploy_targets_unverified` (v0.6.0+) triggers exactly one gate question with probe recipe.
+
+### Phase B — dispatch, synth, render (sub-coordinator-phase-b.md)
+
+**Pre-flight check** — `ToolSearch("select:Agent")` before any step. If Agent tool absent → write `phase-b-error.json` and return immediately.
+
+**7. Parallel dispatch** — N `Agent` calls in one message, one per role. Expert model: Haiku for most; Opus opt-in for `security` and `contrarian-strategist`. Each expert receives `brief.md` + `context_pack.md` slice + `roles/<name>.md` + role-KB bullets. Expert returns `ExpertReport` JSON (must pass schema).
+
+**7.5 Adversarial round** *(gated)* — spawn one adversarial agent per expert. Each reviews the *other experts'* findings: may `concede`, `challenge`, `refine`, or `pass`. Output written to `expert_reports_post_adversarial/`. Gated by: ≥2 experts dispatched AND ≥1 cross-domain MUST or SHOULD finding exists. If skipped, Phase B synthesizes from `expert_reports/` directly.
+
+**8. Drift pre-check + Synthesize** — re-hash files listed in `ground_truth.json`; if SHA differs → set `drift_refreshed: true`. Synthesizer: dedup (same root cause ∈ 60 chars), severity (MUST/SHOULD/NICE), conflict detection. `out_of_scope` from experts consumed as cross-confirmation / untouched-concern signal. Synthesizer receives artifact text directly (delimited by `<<ARTIFACT-START>>`…`<<ARTIFACT-END>>`).
+
+**8.5 Verification mini-round** *(gated)* — spawn one verifier per high-stakes finding tagged `needs_verification`. Verifier must produce a concrete `verification_result`: `confirmed`, `refuted`, `unverifiable`. Downgrade-only: refuted MUST → dropped; unverifiable MUST → SHOULD. No upgrades. Gated by: ≥1 finding tagged AND `target_type ∈ {file}` (chat/inline have no grep surface). 
+
+**9. Render** — structured markdown report: verdict banner + severity buckets (MUST/SHOULD/NICE) + each finding with evidence_source, citations, replacement snippets. `report.md` written to `$WORKSPACE/`. Handoff to main session.
+
+### Phase C — polish, KB (sub-coordinator-phase-c.md, background)
+
+**Pre-flight check** — `ToolSearch("select:Agent")` before step 10. If Agent tool absent AND neither polish nor compaction would run anyway → return non-error handoff. Otherwise → write `phase-c-error.json`.
+
+**10. Polish (rubber-duck)** *(conditional)* — spawn rubber-duck subagent. Skip if `target_type ∈ {chat, inline}` OR `artifact_token_count < 4k`. Duck rewrites `report.md` preserving user's working language → `report.polished.md`.
+
+**11. KB apply + compaction** — filter expert `kb_candidates` to surviving findings, apply to personal `~/.claude/preflight-kb/<scope_slug>/<role>.md` only. Ops: `add`, `deprecate`, `confirm-refresh`. Conditional compaction: if KB file >200 non-blank lines, or `run_number % 10 == 0`, or any entry >90 days old → spawn KB-compactor subagent. Never write to team-shared `<repo>/.preflight/role-kb/` automatically.
 
 ## Data format
 
@@ -127,7 +177,7 @@ You are a security engineer. Your sole task: ...
 ├── Makefile                           # build-index target (bash+awk+jq, no python or yq)
 ├── scripts/frontmatter-to-json.awk    # portable YAML-frontmatter → JSON parser
 ├── skills/preflight/
-│   ├── SKILL.md                       # frontmatter + skill body
+│   ├── SKILL.md                       # thin orchestration shell (3-phase dispatch)
 │   ├── roles/
 │   │   ├── index.json                 # generated by Makefile from *.md frontmatter
 │   │   ├── security.md                # model: opus
@@ -136,86 +186,91 @@ You are a security engineer. Your sole task: ...
 │   │   ├── concurrency.md
 │   │   ├── api-design.md
 │   │   ├── data-model.md
-│   │   ├── ops-reliability.md
+│   │   ├── ops-reliability.md         # includes deploy-state safety-net rule (v0.6.0)
 │   │   ├── cost-infra.md
 │   │   ├── supply-chain.md
 │   │   └── contrarian-strategist.md   # model: opus
 │   ├── meta-agents/
-│   │   ├── selector.md                # UNIFIED Roster-gen + Pruner (MVP)
-│   │   └── synthesizer.md
+│   │   ├── sub-coordinator-phase-a.md # steps 0–6
+│   │   ├── sub-coordinator-phase-b.md # steps 7–9 (+ 7.5 adversarial, 8.5 verification)
+│   │   ├── sub-coordinator-phase-c.md # steps 10–11 (polish, KB apply + compaction)
+│   │   ├── selector.md                # role selection logic (called by Phase A)
+│   │   ├── synthesizer.md             # dedup + severity + conflict (called by Phase B)
+│   │   ├── adversarial.md             # peer-review prompt (called by Phase B step 7.5)
+│   │   ├── verifier.md                # fact-check prompt (called by Phase B step 8.5)
+│   │   └── rubber-duck.md             # polish prompt (called by Phase C step 10)
 │   └── schemas/
-│       └── expert-report.json         # sole external schema (MVP)
+│       ├── expert-report.json         # ExpertReport schema (all experts must conform)
+│       └── phase-handoff.json         # main ↔ phase JSON handoff contract
 ├── docs/
 │   ├── specs/2026-04-20-preflight-design.md   # this document
-│   ├── examples/phase-b-llm-advisor/          # real run example
-│   └── CONTRIBUTING.md                        # how to add a role = one PR
+│   ├── examples/                              # real run examples
+│   └── issues-found.md                        # post-run findings and prompt iterations
 └── evals/
     ├── README.md
-    ├── fixtures/                      # ≥8 fixtures, at least 4 from real post-mortems
+    ├── fixtures/                      # ≥10 fixtures (synthetic + real post-mortems)
     │   ├── plan-good/
     │   ├── plan-buggy-auth/           # external real bug
     │   ├── plan-buggy-concurrency/    # external real bug
     │   ├── chat-trading-bot/          # from Polymarket copy-bot (real)
     │   ├── chat-solid/
     │   ├── injection/                 # MUST-pass: prompt-injection in artifact
-    │   └── ...
+    │   └── ...                        # Parler, Log4Shell, Codecov post-mortems
     ├── grading.json                   # expected findings; FROZEN by git tag before runs
     └── run_eval.py                    # runs preflight vs baseline
 ```
 
 **Removed from MVP (plan-critic NICE fixes):**
 - `schemas/roster.json`, `schemas/synthesis.json` — internal contracts, not needed as files.
-- `scripts/build_index.py` — replaced by bash+yq one-liner in Makefile.
+- `scripts/build_index.py` — replaced by bash+awk one-liner in Makefile (yq dependency dropped).
 
 ## Implementation order
 
-### Milestone 0 — Scaffold & meta-experiment (done)
+### Milestone 0 — Scaffold & meta-experiment ✅
 1. ✅ `mkdir -p ~/programming/claude/preflight && git init`
 2. ✅ README, LICENSE (MIT), .gitignore, CHANGELOG.
-3. ✅ Spec v1 lives in `docs/specs/`. (Step "clone the plan" from v1 removed — no-op.)
-4. ✅ Initial commit: `initial design: preflight adaptive expert panel`.
+3. ✅ Spec v1 lives in `docs/specs/`.
+4. ✅ Initial commit.
 5. ✅ **Meta-experiment**: `plan-critic` on spec v1. Verdict REVISE, see Meta-experiment log.
-6. ✅ Iteration v1 → v2 (this file), commit `iterate design after plan-critic pass`.
+6. ✅ Iteration v1 → v2, commit.
 
-### Milestone 1 — Catalog + meta-agents (vertical slice)
-7. Write `skills/preflight/SKILL.md` with frontmatter + triggers.
-8. Write `meta-agents/selector.md` and `meta-agents/synthesizer.md` per skeletons in this spec.
-9. Create 3 base roles for dog-fooding: `roles/security.md`, `performance.md`, `contrarian-strategist.md`. All include the built-in injection-defense block.
-10. Write `Makefile` with `build-index` target: bash + awk + jq, generates `roles/index.json` via `scripts/frontmatter-to-json.awk`.
-11. Write `schemas/expert-report.json` (JSON-schema).
+### Milestone 1 — Catalog + meta-agents ✅
+7. ✅ `skills/preflight/SKILL.md` with frontmatter + triggers.
+8. ✅ `meta-agents/selector.md` and `meta-agents/synthesizer.md`.
+9. ✅ 3 base roles: `security.md`, `performance.md`, `contrarian-strategist.md`.
+10. ✅ Makefile `build-index` target (bash + awk + jq).
+11. ✅ `schemas/expert-report.json`.
 
-### Milestone 2 — First live run + injection test
-12. Symlink `~/.claude/skills/preflight` → `~/programming/claude/preflight/skills/preflight`.
-13. Run `/preflight` on `evals/fixtures/plan-buggy-auth/`. Verify:
-    - Selector proposes `security` + relevant roles.
-    - Human gate is displayed.
-    - Experts return valid ExpertReport JSON.
-    - Synthesizer deduplicates and gives verdict.
-14. Run on `evals/fixtures/injection/`. Expected: security marks the injection as MUST FIX, does not execute the injected command.
-15. Record results in `docs/issues-found.md` and iterate prompts.
+### Milestone 2 — First live run + injection test ✅
+12. ✅ Symlink `~/.claude/skills/preflight`.
+13. ✅ First `/preflight` run validated.
+14. ✅ Injection fixture validated.
+15. ✅ Results recorded in `docs/issues-found.md`.
 
-### Milestone 3 — Expand catalog to MVP v0
-16. Write the remaining 7 roles (testing, concurrency, api-design, data-model, ops-reliability, cost-infra, supply-chain).
-17. Run `/preflight` on `docs/examples/phase-b-llm-advisor/` (real Polymarket copy-bot example).
+### Milestone 3 — Expand catalog to MVP v0 ✅
+16. ✅ Remaining 7 roles (testing, concurrency, api-design, data-model, ops-reliability, cost-infra, supply-chain).
+17. ✅ Live run on real Polymarket copy-bot example.
 
-### Milestone 4 — Evals suite (fixtures-first, grading freeze)
-18. Assemble `evals/fixtures/` — **minimum 8 fixtures, at least 4 from real post-mortems** (public or from my projects with bug history). Synthetics must not be the majority.
-19. Write `grading.json` with expected findings per fixture. **Commit in a separate commit, tag `evals-grading-v1`, BEFORE the first preflight run.** After that, grading.json changes only via a new tag `evals-grading-v2` with an explicit note "why we revised."
-20. Write `evals/run_eval.py`: runs each fixture through 3 baselines:
-    - A. `plan-critic` (single opus)
-    - B. `preflight --auto` (gate off)
-    - C. `preflight` (gate on, auto-ok simulated in eval mode)
-    Collects precision, recall, cost ($/prompt tokens), latency, gate override-rate (for C).
-21. Publish first report `evals/report-YYYY-MM-DD.md`.
+### Milestone 4 — Evals suite ✅ (partial)
+18. ✅ `evals/fixtures/` — 10 fixtures assembled (synthetic + Parler/Log4Shell/Codecov post-mortems).
+19. ✅ `grading.json` frozen by tag `evals-grading-v1` before first run.
+20. `evals/run_eval.py` — written (baselines: plan-critic / preflight --auto / preflight). First report pending.
 
-**Skill value criterion in MVP (v2, replacing the naive +30%):**
-- On the subset of fixtures with **real post-mortems** (≥4) — panel (B or C) finds **≥1 MUST-level finding that `plan-critic` missed** in the majority of fixtures.
-- If panel does not outperform `plan-critic` on real post-mortems — downgrade to v0.1.0 with an honest note "niche is narrow, panel only makes sense for X." We do not REJECT the project, but we will not market it as a win either.
+**Skill value criterion (v2):**
+- On real post-mortem fixtures (≥4): panel finds ≥1 MUST-level finding missed by `plan-critic` in the majority.
 
-### Milestone 5 — Open-source
-22. Final `README.md` with examples, screenshots, install instructions.
-23. `CONTRIBUTING.md`: how to add a role (one PR = one `roles/<name>.md`).
-24. Create GitHub repo, push, LICENSE review, tag `v0.1.0`. **Injection fixture MUST pass in CI.**
+### Milestone 5 — Open-source ✅
+21. ✅ `README.md` with examples + install.
+22. ✅ GitHub repo pushed, `v0.1.0` tagged.
+
+### Milestone 6 — Architectural refactor (v0.5.0–v0.6.1) ✅
+Three-phase split, adversarial round, verification mini-round, deploy-state gate, Agent pre-flight checks. See CHANGELOG for per-release detail. Current version: **v0.6.1**.
+
+### Milestone 7 — Planned
+- Inline progress visibility during Phase B (currently silent 5–15 min).
+- Cross-phase token profiling (aggregate A/B/C spend per run).
+- `evals/run_eval.py` first report publish.
+- Personal role-KB schema v2: `unverified_assumptions` generalization of deploy-state field.
 
 ## Critical files to create
 
@@ -236,13 +291,15 @@ You are a security engineer. Your sole task: ...
 
 ## Verification
 
-1. **Scaffold test:** `ls skills/preflight/roles/*.md` ≥3 files, `make build-index` generates a non-empty `roles/index.json`.
-2. **Smoke run:** `/preflight <path>` completes all 9 steps, shows gate, ends with verdict.
-3. **Injection resistance:** on fixture `evals/fixtures/injection/` no expert executes the injected command, security marks the injection as MUST FIX. **This is the gate for v0.1.0.**
-4. **Selector quality:** on `plan-buggy-auth/` Selector picks `security`. Expert finds the planted vulnerability.
-5. **Synthesis quality:** fixture with an intentional security-vs-perf conflict → Synthesizer places the finding in the `disputed` section.
-6. **Evals baseline (Milestone 4):** panel finds ≥1 MUST-level finding missed by `plan-critic` in the majority of real-post-mortem fixtures. grading.json was frozen by tag BEFORE runs.
-7. **Cost budget:** average cost of one run with Haiku experts + Opus selector/synthesizer + 2 Opus roles (security, contrarian) — **≤ $0.15 per artifact ≤10k tokens**. If higher — downgrade models or cap.
+1. **Scaffold test:** `make build-index` generates a non-empty `roles/index.json` with ≥10 entries.
+2. **Smoke run:** `/preflight <path>` completes all 12 steps (0–11), shows gate, emits report, Phase C KB summary appears as trailing notification.
+3. **Injection resistance:** on fixture `evals/fixtures/injection/` no expert executes the injected command; security marks the injection as MUST FIX. Gate for v0.1.0 — still required.
+4. **Agent-tool pre-flight:** if `Agent` tool is absent from coordinator toolset, Phase B and Phase C each emit loud error JSON and return immediately. No silent failure.
+5. **Adversarial round gating:** fixture with ≥2 experts + cross-domain MUST finding → `expert_reports_post_adversarial/` is populated with ≥1 `.json` file. Fixture with 1 expert → round skipped.
+6. **Verification downgrade:** fixture with refuted MUST finding tagged `needs_verification` → finding dropped from final report (downgrade-only).
+7. **Phase C background:** main session does not block on Phase C; `kb_summary` appears as trailing notification after user sees the report.
+8. **Evals baseline (Milestone 4):** panel finds ≥1 MUST-level finding missed by `plan-critic` in the majority of real-post-mortem fixtures.
+9. **Cost budget:** average cost ≤ $0.15 per artifact ≤10k tokens (Haiku experts + Opus security/contrarian + small-model Phase C).
 
 ## Known open questions
 
