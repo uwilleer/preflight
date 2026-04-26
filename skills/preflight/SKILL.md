@@ -24,7 +24,7 @@ Spawn:
 
 ```
 Agent(
-  subagent_type: general-purpose,
+  subagent_type: preflight-coordinator,
   description: "Preflight phase A — init+gate",
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-a.md>
          + "\n\n## Invocation inputs\n\n"
@@ -67,7 +67,7 @@ Spawn:
 
 ```
 Agent(
-  subagent_type: general-purpose,
+  subagent_type: preflight-coordinator,
   description: "Preflight phase B — panel+synth+render",
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-b.md>
          + "\n\n## Invocation inputs\n\n"
@@ -99,7 +99,7 @@ Spawn with `run_in_background: true`:
 
 ```
 Agent(
-  subagent_type: general-purpose,
+  subagent_type: preflight-coordinator,
   description: "Preflight phase C — polish+KB",
   run_in_background: true,
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-c.md>

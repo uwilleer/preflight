@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.2] — 2026-04-27
+
+Root-cause fix for the Agent-tool inheritance failure mode that 0.6.1 made loud but did not solve. Phase B's pre-flight check (added in 0.6.1) correctly detected the missing `Agent` tool and fail-fasted, but in observed runs that meant "skill does not work" rather than "skill is slightly more expensive". This release escalates each phase from `general-purpose` to a dedicated subagent type with explicit `tools: [Agent, ...]` in its frontmatter, so Agent-tool availability is guaranteed by the agent definition itself rather than assumed from default inheritance.
+
+### Added
+- **`agents/preflight-coordinator.md`** — new custom subagent type with explicit `tools` frontmatter listing `Agent` (plus `Read`, `Bash`, `Write`, `Glob`, `Grep`, `ToolSearch`, `WebFetch`, `WebSearch`). Body is intentionally minimal: full operating instructions arrive in the spawn `prompt` from `meta-agents/sub-coordinator-phase-{a,b,c}.md` as before. The agent file exists solely to pin the toolset — it is not a behavioural override.
+- **README install step** for the new agent symlink, marked required (not optional like the Stop-hook reminder).
+
+### Changed
+- **SKILL.md**: all three phase spawns (Phase A line 27, Phase B line 70, Phase C line 102) now use `subagent_type: preflight-coordinator` instead of `subagent_type: general-purpose`. No other changes — the prompts, model-choice logic, and handoff contracts are untouched.
+
+### Kept (deliberately not removed)
+- The Phase B and Phase C pre-flight `Agent`-tool checks from 0.6.1 stay as a safety net. If a future harness change breaks `tools` inheritance even on custom subagents, the skill will still fail-fast with the same loud error JSON instead of silently degrading.
+
+### Why this release
+0.6.1 closed the silent-failure window but the underlying availability problem remained. The pre-flight check's own error message documented the proper fix ("escalate to a subagent_type with guaranteed Agent") — this release implements that escalation. The change is intentionally minimal: one new agent file + three line replacements in SKILL.md. No meta-agent prompts touched, no synthesis logic changed, no new failure modes introduced.
+
+### Migration
+Existing installations need the new symlink (see Install section in README). Without it, the skill will fail with a clear "subagent type 'preflight-coordinator' not found" error from the harness — no silent degradation. After symlinking, no further user action required; the skill behaves identically to 0.6.1 on the happy path.
+
 ## [0.6.1] — 2026-04-25
 
 Closes a class of silent failures observed in a real run (weather_bot project, two preflight runs over a `chat` artifact, both fully completed but with workspace-level pathologies that produced misleading state). Two related bugs surfaced together:
