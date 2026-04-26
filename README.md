@@ -62,7 +62,10 @@ Three things to notice:
 ```bash
 git clone https://github.com/uwilleer/preflight.git ~/programming/claude/preflight
 ln -sf ~/programming/claude/preflight/skills/preflight ~/.claude/skills/preflight
+ln -sf ~/programming/claude/preflight/agents/preflight-coordinator.md ~/.claude/agents/preflight-coordinator.md
 ```
+
+The third symlink installs a custom subagent type that the skill spawns for each phase. Required, not optional — Phase B fails fast without it (the default `general-purpose` subagent does not reliably inherit the `Agent` tool to nested expert dispatches).
 
 Reload Claude Code (or start a new session). Activates on `/preflight` or natural-language triggers.
 
