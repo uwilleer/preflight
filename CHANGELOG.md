@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.3] — 2026-04-27
+
+Gate questions now surface trade-offs explicitly. Observed failure mode: the user defaults to picking option `[a]` because it sounds faster, not realizing `[b]` was the more thorough or load-bearing choice — the gate hid the cost-vs-coverage axis behind bare action labels. This release makes each `[x]` option carry mandatory `+` (what's gained) and `−` (what's given up) lines, so the trade-off dimension is visible at a glance instead of inferred from the option text.
+
+### Changed
+- **`meta-agents/sub-coordinator-phase-a.md` step 6 gate format.** Each `binary` / `choice` option must now include a `+ <pros>` line and a `− <cons>` line under the option label, naming a concrete trade-off dimension (speed, scope, accuracy, cost, risk, follow-up effort). Bare option labels are now an explicit anti-pattern. The example template was rewritten to show the new shape; the deploy-state gate question (the only hardcoded gate prompt) was rewritten to follow the new format.
+- **`gate.json` options shape (doc-level, not schema-enforced).** Each entry in `options[]` now carries `{key, label, pros, cons}` instead of a bare string. The `gate.md` render is the user-visible artefact; `gate.json` mirrors it for re-iteration parsing. `open` questions still skip `+` / `−` since they have no fixed alternatives.
+
+### Why this release
+The gate's job is to extract a decision, not present a menu. When two options share a hidden trade-off (one is fast/shallow, the other slow/thorough), users systematically pick the cheaper-sounding one — and the panel runs against the wrong premise. Surfacing `+ gain / − cost` per option turns the choice into an explicit dimensional comparison ("speed vs coverage"), which is what the user is actually deciding. This is a UX-only change: no new pipeline steps, no schema breakage, no behavioural change to Phase B / synthesis / report.
+
+### Migration
+None. Old runs' `gate.md` files (without `+` / `−`) are still readable. New runs render the new format automatically. Phase A re-iteration parsing (`"1=a 2=b"` answer strings) is unchanged — option keys still use single-letter `[a]` / `[b]` markers.
+
 ## [0.6.2] — 2026-04-27
 
 Root-cause fix for the Agent-tool inheritance failure mode that 0.6.1 made loud but did not solve. Phase B's pre-flight check (added in 0.6.1) correctly detected the missing `Agent` tool and fail-fasted, but in observed runs that meant "skill does not work" rather than "skill is slightly more expensive". This release escalates each phase from `general-purpose` to a dedicated subagent type with explicit `tools: [Agent, ...]` in its frontmatter, so Agent-tool availability is guaranteed by the agent definition itself rather than assumed from default inheritance.

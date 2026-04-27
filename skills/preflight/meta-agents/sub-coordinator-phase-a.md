@@ -198,7 +198,11 @@ Checklist items for this run:
 - Already-done scoping (tasks the plan creates that exist in the tree).
 - Unverified premises the plan depends on.
 - Roster ambiguity (Selector had a close call between two roles).
-- **Unverified deploy/remote state.** If `ground_truth.deploy_targets_unverified == true`, emit exactly one `choice` question with `evidence_path: "ground_truth.json#/deploy_keywords_matched"`. The prompt should explain: the plan references production / rollout / `<matched keywords>`, but the deploy target's actual state has not been verified. Offer three options: `[a]` run a probe and paste its output (for SSH deploy: `ssh <host> 'cd <deploy-path> && git status && git branch --show-current && git log --oneline -5'`; for k8s: `kubectl get deploy <name> -o wide` + `kubectl describe`), `[b]` assume runtime matches local workspace (panel will flag this as MUST-FIX), `[c]` n/a — artifact is not about a real deploy. Render the prompt in the user's working language; keep technical tokens (commands, flags, keywords) verbatim. This question exists because preflight otherwise reviews a static artifact against static local state — out-of-repo drift (prod on feature branch, schema ahead, env-vars changed) cannot be detected by file_verifications alone. This is the only gate question whose sole purpose is to pull remote state into ground_truth.
+- **Unverified deploy/remote state.** If `ground_truth.deploy_targets_unverified == true`, emit exactly one `choice` question with `evidence_path: "ground_truth.json#/deploy_keywords_matched"`. The prompt should explain: the plan references production / rollout / `<matched keywords>`, but the deploy target's actual state has not been verified. Offer three options, each with `+` / `−` trade-off lines per the format above:
+  - `[a]` probe and paste output (for SSH: `ssh <host> 'cd <deploy-path> && git status && git branch --show-current && git log --oneline -5'`; for k8s: `kubectl get deploy <name> -o wide` + `kubectl describe`). `+ panel reviews against real remote state, no MUST-FIX for unverified deploy. − ~30s of work + paste step.`
+  - `[b]` assume runtime matches local workspace. `+ no probe step, panel runs immediately. − ops-reliability auto-fires MUST-FIX for unverified deploy; out-of-repo drift stays invisible.`
+  - `[c]` n/a — artifact is not about a real deploy. `+ skips deploy gate entirely; panel runs without ops noise. − wrong call here means a real prod claim goes un-probed.`
+  Render the prompt in the user's working language; keep technical tokens (commands, flags, keywords) verbatim. This question exists because preflight otherwise reviews a static artifact against static local state — out-of-repo drift (prod on feature branch, schema ahead, env-vars changed) cannot be detected by file_verifications alone. This is the only gate question whose sole purpose is to pull remote state into ground_truth.
 
 If there are no such items, **auto-proceed**: return `gate: null`. The main session will recognize this and dispatch Phase B directly.
 
@@ -207,10 +211,16 @@ If there are no such items, **auto-proceed**: return `gate: null`. The main sess
 - `choice` — 3–4 named options for format/scope decisions.
 - `open` — free-form.
 
-**Language.** `gate.md` and the `prompt` / `options` strings in `gate.json` are user-facing — render them in `user_language`. Keep technical tokens verbatim: file paths, `file:line` refs, command lines, JSON keys, role names, CLI flags, the `[a]` / `[b]` / `[c]` option markers, the `Answers:` example syntax. The `id`, `type`, and `evidence_path` fields are machine-internal — keep English / lowercase ASCII.
+**Option trade-offs are mandatory for `binary` and `choice`.** A bare option label hides the decision: the user often picks A because it's faster, not realizing B is far more thorough. Each `[x]` option must surface its trade-off explicitly via two short lines:
+- `+ <what's gained>` — speed, lower cost, narrower scope, lower risk, faster panel, simpler implementation, etc. Pick one or two concrete dimensions, not a vague "it works".
+- `− <what's given up>` — coverage, accuracy, depth, scope creep risk, follow-up cost, blind spots, brittleness, etc. Be specific enough that "fast but shallow" vs "slow but thorough" is visible at a glance.
+
+If two options share the same trade-off dimension (e.g. both differ on scope), name the same dimension on both with opposite values, so the user can compare on the axis they care about. Skip the `+` / `−` lines for `open` questions — those have no fixed alternatives. Keep each `+` / `−` line short (one phrase, ≤ ~80 chars); long prose belongs in `brief.md`, not the gate.
+
+**Language.** `gate.md` and the `prompt` / `options` strings in `gate.json` are user-facing — render them in `user_language`. Keep technical tokens verbatim: file paths, `file:line` refs, command lines, JSON keys, role names, CLI flags, the `[a]` / `[b]` / `[c]` option markers, the `+` / `−` markers, the `Answers:` example syntax. The `id`, `type`, and `evidence_path` fields are machine-internal — keep English / lowercase ASCII.
 
 **Write two files:**
-- `$WORKSPACE/gate.json` — `{questions: [{id, type, prompt, options?, evidence_path}]}` where `evidence_path` points back into `ground_truth.json` or `brief.md`.
+- `$WORKSPACE/gate.json` — `{questions: [{id, type, prompt, options?, evidence_path}]}`. For `binary` / `choice` questions, each `options[]` entry has shape `{key: "a"|"b"|..., label: "<short action>", pros: "<what's gained>", cons: "<what's given up>"}`. `evidence_path` points back into `ground_truth.json` or `brief.md`.
 - `$WORKSPACE/gate.md` — what the user sees. Compact render:
 
 ```
@@ -220,15 +230,23 @@ Checked the code — <N> items where the plan diverges from reality or requires 
 workspace: <relative path>  ·  details in brief.md, ground_truth.json
 
 1. <question 1 prompt — one or two sentences, plain language>
-   [a] <option A — what actually happens if you pick this>
-   [b] <option B>
+   [a] <short label — the action this option takes>
+       + <what's gained: speed / scope / accuracy / cost / risk reduction>
+       − <what's given up on the same or related dimension>
+   [b] <short label>
+       + <pros>
+       − <cons>
    (or your own answer)
 
 2. <question 2 prompt>
-   [a] ...
-   [b] ...
+   [a] <label>
+       + ...
+       − ...
+   [b] <label>
+       + ...
+       − ...
 
-3. <open question — just ask>
+3. <open question — just ask, no [a]/[b] needed>
 
 Answers: as a string like "1=a 2=b 3=let me test first", or free-form.
 ```
@@ -271,6 +289,8 @@ On any exception: write `$WORKSPACE/phase-a-error.json` with `{step, message, st
 
 - **Inline selector logic.** Step 5 is a separate `Agent` call. Inlining silently skips the selector's anti-patterns (roster caps, "everyone gets security", "contrarian always useful").
 - **Dumping brief/ground_truth in the gate.** The gate is 2–5 questions pointing at files, not a recap.
+- **Bare option labels (no `+` / `−` trade-off).** Users default to picking A because it sounds faster, missing that B was the more thorough choice. Every `binary` / `choice` option must show what's gained and what's given up.
+- **Vague `+` / `−` lines ("it works" / "less good").** Pick a concrete dimension — speed, scope, coverage, accuracy, cost, risk, follow-up effort. If you can't name the dimension, the option is not actually a distinct choice — fold it into the question prompt.
 - **Running the panel from inside Phase A.** Panels are Phase B. You stop at step 6.
 - **Speaking to the user.** You write artefacts and return JSON. The main session speaks.
 - **Trusting artifact numbers.** Step 4 `ground_truth` is where discovery lives. If the brief's Load-bearing facts section has no surprises, you underextracted — re-grep.
