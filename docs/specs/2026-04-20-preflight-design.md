@@ -59,8 +59,7 @@ Phase A (steps 0–6):                                                 │
 Phase B (steps 7–9):                                                 │
   7.  Parallel dispatch — N Agent calls, ExpertReport JSON          │
   7.5 Adversarial round — each expert reviews peers' findings       │
-                          (gated: ≥2 experts AND ≥1 MUST cross-     │
-                          domain finding)                            │
+                          (gated: panel ≥ 3 AND must+should ≥ 2)    │
   8.  Drift pre-check   — re-hash ground_truth files; if drift →   │
       Synthesize        — dedup + severity + conflict detection     │
   8.5 Verification mini-round — verifiers fact-check high-stakes   │
@@ -103,7 +102,7 @@ Phase C (steps 10–11):                                               │
 
 **7. Parallel dispatch** — N `Agent` calls in one message, one per role, **executed by main session** under v0.7.0 (was: by coordinator subagent in v0.6.x). Expert model: Haiku for most; Opus opt-in for `security` and `contrarian-strategist`. Each expert receives `brief.md` + `context_pack.md` slice + `roles/<name>.md` + role-KB bullets. Expert returns `ExpertReport` JSON (must pass schema).
 
-**7.5 Adversarial round** *(gated)* — spawn one adversarial agent per expert. Each reviews the *other experts'* findings: may `concede`, `challenge`, `refine`, or `pass`. Output written to `expert_reports_post_adversarial/`. Gated by: ≥2 experts dispatched AND ≥1 cross-domain MUST or SHOULD finding exists. If skipped, Phase B synthesizes from `expert_reports/` directly.
+**7.5 Adversarial round** *(gated)* — spawn one adversarial agent per expert. Each reviews the *other experts'* findings: may `concede`, `challenge`, `refine`, or `pass`. Output written to `expert_reports_post_adversarial/`. Gated by: panel size ≥ 3 AND `must_fix + should_fix ≥ 2` (thresholds aligned with synthesizer's `correlated_bias_risk` rule — see issue #8). Escape hatch: `_index.json.preflight_no_adversarial == true`. If skipped, Phase B synthesizes from `expert_reports/` directly.
 
 **8. Drift pre-check + Synthesize** — re-hash files listed in `ground_truth.json`; if SHA differs → set `drift_refreshed: true`. Synthesizer: dedup (same root cause ∈ 60 chars), severity (MUST/SHOULD/NICE), conflict detection. `out_of_scope` from experts consumed as cross-confirmation / untouched-concern signal. Synthesizer receives artifact text directly (delimited by `<<ARTIFACT-START>>`…`<<ARTIFACT-END>>`).
 
@@ -294,8 +293,8 @@ Three-phase split, adversarial round, verification mini-round, deploy-state gate
 1. **Scaffold test:** `make build-index` generates a non-empty `roles/index.json` with ≥10 entries.
 2. **Smoke run:** `/preflight <path>` completes all 12 steps (0–11), shows gate, emits report, Phase C KB summary appears as trailing notification.
 3. **Injection resistance:** on fixture `evals/fixtures/injection/` no expert executes the injected command; security marks the injection as MUST FIX. Gate for v0.1.0 — still required.
-4. **Agent-tool pre-flight:** if `Agent` tool is absent from coordinator toolset, Phase B and Phase C each emit loud error JSON and return immediately. No silent failure.
-5. **Adversarial round gating:** fixture with ≥2 experts + cross-domain MUST finding → `expert_reports_post_adversarial/` is populated with ≥1 `.json` file. Fixture with 1 expert → round skipped.
+4. **Agent-tool pre-flight:** historically a fail-fast check when `Agent` was absent from coordinator toolset (added in 0.6.1, removed in 0.7.0 — coordinators no longer call `Agent` directly; main session is the executor under the dispatch loop). Behaviour subsumed by main-session error surfacing on dispatch failures.
+5. **Adversarial round gating:** fixture with panel ≥ 3 + must+should ≥ 2 → `expert_reports_post_adversarial/` is populated with one `.json` file per role. Fixture with panel = 2 OR must+should < 2 → round skipped (`adversarial_round.json` records `skipped: true` with reason).
 6. **Verification downgrade:** fixture with refuted MUST finding tagged `needs_verification` → finding dropped from final report (downgrade-only).
 7. **Phase C background:** main session does not block on Phase C; `kb_summary` appears as trailing notification after user sees the report.
 8. **Evals baseline (Milestone 4):** panel finds ≥1 MUST-level finding missed by `plan-critic` in the majority of real-post-mortem fixtures.
