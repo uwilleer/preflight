@@ -61,66 +61,134 @@ When the user replies to the gate, parse the answer:
 
 If the answer is ambiguous, ask one short clarifying question — do not guess.
 
-### Phase B — dispatch, synth, render
+### Phase B — dispatch, synth, render (round-trip loop, v0.7.0)
 
-Spawn:
+Phase B coordinator under v0.7.0 returns one of `complete | dispatch | error` per spawn. Main session runs a loop: spawn coordinator → if `dispatch`, execute the requested `Agent` calls and write results to `save_to` paths → re-spawn coordinator with `resume_token` set. Loop terminates on `complete` or `error`. Worst case: 5 coordinator spawns (initial + 4 dispatch round-trips for steps 7, 7.5, 8, 8.5). Common case: 3–4. See `docs/specs/2026-05-03-phase-b-main-driven-dispatch.md`.
+
+The loop matters because empirically `Agent` is not delivered to subagent contexts in current CC builds — only the main session can issue `Agent` calls. The coordinator is now a state machine over workspace files; main is the executor.
+
+**1. Initial spawn:**
 
 ```
 Agent(
   subagent_type: general-purpose,
-  description: "Preflight phase B — panel+synth+render",
+  description: "Preflight phase B coordinator",
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-b.md>
          + "\n\n## Invocation inputs\n\n"
          + JSON.stringify({
              workspace_path: <from Phase A>,
              gate_answers_path: <"<workspace>/gate_answers.json"> | null,
-             user_language: <same string passed to Phase A>
+             user_language: <same string passed to Phase A>,
+             resume_token: null
            })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
 )
 ```
 
-Choose model per-task: panels with ≤3 roles and a code-touching artifact → small model is fine for Phase B (the heavy thinking is in the experts and the synthesizer subagents it spawns); panels with ≥4 roles or conflict-heavy synthesis → upgrade.
+Coordinator model: Haiku is sufficient (state inspection + dispatch construction; no heavy reasoning). Upgrade only if experiments show coordinator quality issues. Expert / synthesizer / verifier model choice is per-request via `request.model_hint`, set by the coordinator at dispatch construction time — pass it as Agent's `model` parameter when executing the dispatch.
 
-Parse the return against `schemas/phase-handoff.json#/definitions/phase_b_output`. On parse failure, retry once with a terser prompt; second failure → stop and surface.
+**2. Loop on `response.action`:**
 
-**Handle the handoff:**
+Parse the return against `schemas/phase-handoff.json#/definitions/phase_b_output`. On parse failure, retry the spawn once with a terser prompt; second parse failure → stop and surface to user.
 
-- If `error_path` is set: Read that file, print contents verbatim, stop. Do NOT spawn Phase C.
-- If `report_too_long` is true: Read `report_path` and emit verbatim. Otherwise emit `report` verbatim.
-- If `skipped_experts` is non-empty: append a one-line note `"⚠ skipped experts: <list> (reports failed twice)"`.
-- If `drift_refreshed` is true: append `"ground_truth refreshed at synth time — repo HEAD moved during review"`.
+- **`"complete"`** — terminal success. Emit `report` (or Read `report_path` and emit if `report_too_long: true`). Append warnings:
+  - if `skipped_experts` non-empty: `"⚠ skipped experts: <list> (reports failed twice)"`
+  - if `drift_refreshed: true`: `"ground_truth refreshed at synth time — repo HEAD moved during review"`
 
-This is the deliverable. The user has their report.
+  Spawn Phase C. **Done.**
 
-### Phase C — polish + KB apply (background)
+- **`"error"`** — terminal failure. Read `error_path`, print contents verbatim, stop. Do NOT spawn Phase C.
 
-Spawn with `run_in_background: true`:
+- **`"dispatch"`** — execute the dispatch (step 3 below), then re-spawn coordinator (step 4).
+
+**3. Executing a dispatch:**
+
+Read `response.dispatch.requests[]`. If `parallelism == "parallel"`, send a **single message** containing N `Agent` tool calls — one per request (parallel execution). If `parallelism == "sequential"`, send them one at a time.
+
+For each request:
+- Spawn `Agent(subagent_type=request.subagent_type, model=request.model_hint, description=request.description, prompt=request.prompt)`.
+- On success: Write the response body to `request.save_to` verbatim.
+- On failure (timeout, malformed JSON the agent itself rejected, exception):
+  - If `request.on_failure == "mark_skipped"`: write to `_index.json.dispatch[<request.id>] = {status: "skipped", reason: "<error summary>"}` and continue.
+  - If `request.on_failure == "abort"`: stop the loop, surface error to the user, do NOT spawn Phase C.
+
+Do NOT modify `request.prompt` — coordinator built it deliberately. Main is a dumb executor.
+
+**4. Re-spawn coordinator:**
 
 ```
 Agent(
   subagent_type: general-purpose,
-  description: "Preflight phase C — polish+KB",
+  description: "Preflight phase B coordinator (resume <resume_token>)",
+  prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-b.md>
+         + "\n\n## Invocation inputs\n\n"
+         + JSON.stringify({
+             workspace_path: <same>,
+             gate_answers_path: <same>,
+             user_language: <same>,
+             resume_token: response.dispatch.resume_token
+           })
+         + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
+)
+```
+
+Loop back to step 2. The deliverable lands when the loop returns `action: "complete"`.
+
+### Phase C — polish + KB apply (background loop, v0.7.0)
+
+Phase C uses the same dispatch-execute-respawn loop pattern as Phase B, but every coordinator spawn carries `run_in_background: true`. The BG-loop pattern was probed and confirmed viable on 2026-05-03 — see `skills/preflight/docs/notes/2026-05-03-phase-c-bg-loop-probe.md`. Phase C is non-blocking: the user already has Phase B's report; Phase C's `kb_summary` is appended on completion, errors surfaced but do not retract the report.
+
+Up to 3 background coordinator spawns per Phase C run: initial → step 10 (rubber-duck) → step 11 (compactor) → complete. Common case is 2 (rubber-duck and KB compaction often skip).
+
+**1. Initial spawn (background):**
+
+```
+Agent(
+  subagent_type: general-purpose,
+  description: "Preflight phase C coordinator",
   run_in_background: true,
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-c.md>
          + "\n\n## Invocation inputs\n\n"
          + JSON.stringify({
              workspace_path: <from Phase B>,
-             user_language: <same string passed to A and B>
+             user_language: <same string passed to A and B>,
+             resume_token: null
            })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
 )
 ```
 
-Choose model per-task: Haiku is usually enough — polish is prose rewriting and KB writes are mechanical. Upgrade only for very long reports.
+Coordinator model: Haiku is sufficient. Per-task model choice for the rubber-duck and compactor lives in `request.model_hint`.
 
-When Phase C completes (you'll get a notification), parse against `schemas/phase-handoff.json#/definitions/phase_c_output`:
+**2. On notification, loop on `response.action`:**
 
-- If `error_path` is set: surface the error path to the user as a short note. Do not retract the report — Phase C failure is non-blocking.
-- Otherwise emit `kb_summary` as a single trailing line.
-- If `polished_report_path` is set (i.e., `duck_skipped` is false), append `"polished version: <polished_report_path>"`.
+Parse against `schemas/phase-handoff.json#/definitions/phase_c_output`. On parse failure, retry the spawn once with a terser prompt; second parse failure → surface the error and stop the loop (Phase C failure is non-blocking — Phase B's report stays).
 
-Do not poll. The harness notifies you on completion.
+- **`"complete"`** — emit `kb_summary` as a single trailing line. If `polished_report_path` is set (`duck_skipped: false`), append `"polished version: <polished_report_path>"`. **Done.**
+
+- **`"error"`** — Read `error_path`, surface a short note to the user. Do NOT retract Phase B's report.
+
+- **`"dispatch"`** — execute the dispatch (same pattern as Phase B step 3 above), then re-spawn coordinator (step 3 below).
+
+**3. Re-spawn coordinator (background):**
+
+```
+Agent(
+  subagent_type: general-purpose,
+  description: "Preflight phase C coordinator (resume <resume_token>)",
+  run_in_background: true,
+  prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-c.md>
+         + "\n\n## Invocation inputs\n\n"
+         + JSON.stringify({
+             workspace_path: <same>,
+             user_language: <same>,
+             resume_token: response.dispatch.resume_token
+           })
+         + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
+)
+```
+
+Each background spawn produces its own notification. Do not poll between notifications — the harness notifies you on completion.
 
 ## Resumability
 
