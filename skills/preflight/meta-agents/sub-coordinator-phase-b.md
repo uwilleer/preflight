@@ -321,20 +321,31 @@ Return:
 
 1. **If `verification_round.json` already exists with `skipped: true`:** proceed to step 9 inline.
 
-2. **Otherwise collect verifier results.** For each claim:
-   - File missing or `status == "unverified"`:
+2. **Otherwise collect verifier results.** For each claim, parse `{status, note, ground_truth_match}` from `verifier_results/<id>.json` (schema: `schemas/verifier-result.json`). Apply the per-status rules:
+
+   - **File missing or `status == "unverified"`:**
      - If claim was in `must_fix`: move to `should_fix`, prepend `"(непроверено: <verifier.note>) "` to title (in English: `"(unverified: <note>) "`). Translate prefix to `user_language`.
      - If already in `should_fix`: leave tier, prepend same prefix.
-     - Add `verification: {status: "unverified", note: "<verifier.note>"}` to the claim object.
-   - `status == "verified"`: leave tier unchanged. Add `verification: {status: "verified", note: ""}` to claim.
-   - `status == "inconclusive"`: leave tier unchanged. Add `verification: {status: "inconclusive", note: "<verifier.note>"}` to claim.
+     - Add `verification: {status: "unverified", note: "<verifier.note>", ground_truth_match: null}` to the claim object.
 
-3. **Recompute verdict — downgrade-only.** Verification mini-round can only soften the verdict, never harden it. Apply ONLY:
-   - If `synth_result.must_fix.length == 0` after demotions AND original verdict was `REVISE`: downgrade to `APPROVE`.
-   - If `synth_result.must_fix.length < 3` after demotions AND original verdict was `REJECT`: downgrade to `REVISE`.
+   - **`status == "verified"`, `ground_truth_match == null`:** leave tier unchanged. Add `verification: {status: "verified", note: "", ground_truth_match: null}` to claim.
+
+   - **`status == "verified"`, `ground_truth_match != null`** *(v0.7.1+ rescue path)*:
+     - Default: leave tier unchanged, add `verification: {status: "verified", note: "<ref note>", ground_truth_match: {kind, ref}}`.
+     - **Rescue rule:** if the claim is currently in `should_fix` AND its title starts with the synthesizer rule-5b downgrade prefix (`"(downgraded: artifact code-claim without code_cited cross-confirm) "`), restore it to `must_fix` AND strip that prefix. Append `"(rescued: ground_truth.<ref>)"` to the title in `user_language` — translate "rescued" appropriately. Increment `verification_round.rescued_should_to_must` counter.
+     - Rationale: synthesizer rule 5b auto-downgrades `artifact_code_claim` MUSTs to SHOULDs because the artifact-quoted code might not match production. When the verifier confirms the underlying fact via Phase A's pre-verified ground_truth, the downgrade reasoning no longer applies — restore the original tier. This is the **only** path where verification can promote a claim; all other adjustments stay downgrade-only.
+
+   - **`status == "inconclusive"`:** leave tier unchanged. Add `verification: {status: "inconclusive", note: "<verifier.note>", ground_truth_match: null}` to claim.
+
+3. **Recompute verdict.** Verification mini-round can soften the verdict (downgrades from demotions) and harden it back ONLY when the rescue path promoted SHOULDs to MUSTs. Apply in this order:
+   - **Soften (post-demotion):**
+     - If `synth_result.must_fix.length == 0` after demotions AND original verdict was `REVISE`: downgrade to `APPROVE`.
+     - If `synth_result.must_fix.length < 3` after demotions AND original verdict was `REJECT`: downgrade to `REVISE`.
+   - **Harden (post-rescue):**
+     - If `verification_round.rescued_should_to_must > 0` AND a softening was applied: re-evaluate at the post-rescue MUST count. If the new MUST count brings us back into the `REVISE` (≥1 MUST) or `REJECT` (≥3 MUSTs) regime, undo the corresponding softening. **Verdict can never end stricter than the synthesizer's original** — rescue at most restores it to the synthesizer's pre-demotion call.
    - Otherwise leave verdict unchanged.
 
-   Do NOT introduce new REJECT conditions. Synthesizer §5 already factored expert verdicts and pre-demotion MUST counts; verification only adjusts for demotion arithmetic. `artifact_self`, `doc_cited`, and verified `artifact_code_claim` MUSTs are legitimate — do not punish them.
+   Do NOT introduce new REJECT conditions beyond restoring synthesizer's original. Synthesizer §5 already factored expert verdicts and pre-demotion MUST counts; verification only adjusts for demotion arithmetic + ground-truth rescue.
 
 4. **Build summary and write `$WORKSPACE/verification_round.json`:**
 
@@ -345,11 +356,12 @@ Return:
      "verified": 4,
      "unverified": 2,
      "inconclusive": 1,
-     "demoted_must_to_should": 2
+     "demoted_must_to_should": 2,
+     "rescued_should_to_must": 1
    }
    ```
 
-   Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields.
+   Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields (now including `ground_truth_match`).
 
 5. **Update `_index.json.last_completed_step = 8`** (step 8.5 shares the integer with step 8).
 
@@ -384,7 +396,13 @@ If `verification_round.unverified > 0` AND `verification_round.skipped == false`
 ```
 (In English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.` where N = `verification_round.demoted_must_to_should`.)
 
-All banners are informational only — they do not change the verdict or remove findings. Omit if fields are absent (old run without the flags).
+If `verification_round.rescued_should_to_must > 0` AND `verification_round.skipped == false` *(v0.7.1+)*: prepend (or append after demotion banner):
+```
+> ℹ {rescued_should_to_must} вывод(а) восстановлены до MUST (ground_truth подтвердил исходный artifact_code_claim). Ищите префикс «(rescued: ground_truth.…)» ниже.
+```
+(In English: `> ℹ {N} claim(s) restored to MUST (ground_truth confirmed the original artifact_code_claim). See "(rescued: ground_truth.…)" prefixes below.` where N = `verification_round.rescued_should_to_must`.)
+
+All banners are informational only — they do not change the verdict or remove findings on their own (the rescue banner reflects a verdict change that the verdict line itself already shows). Omit if fields are absent (old run without the flags — `rescued_should_to_must` is omitted from pre-v0.7.1 runs).
 
 **Pre-render gate (run mentally first):**
 1. Did I read `synth_result.json` from disk in this resume spawn? If no → re-read it. Do not render from memory of a prior spawn.

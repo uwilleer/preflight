@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/uwilleer/preflight/schemas/verifier-result.json",
+  "title": "VerifierResult",
+  "description": "Output emitted by a single Haiku verifier (Phase B step 8.5). One JSON object per claim, written to $WORKSPACE/verifier_results/<id>.json by the main session after dispatch. Phase B step 8.5.resume reads these to apply demotion arithmetic and (since v0.7.1) the ground-truth-rescue promotion path.",
+  "type": "object",
+  "required": ["status"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["verified", "unverified", "inconclusive"],
+      "description": "verified — claim cites real text in brief OR matches a positive ground_truth entry. unverified — claim contradicts already_done, cites stale file_verifications, or makes a specific factual claim the brief does not support. inconclusive — too abstract to verify in 60 seconds."
+    },
+    "note": {
+      "type": "string",
+      "description": "One sentence in user_language explaining the verdict. Empty string when status==verified AND ground_truth_match is null (the verdict is self-explanatory). Empty when status==verified AND ground_truth_match.kind is set (ref string in ground_truth_match carries the citation)."
+    },
+    "ground_truth_match": {
+      "description": "v0.7.1+: when the verifier's verdict is influenced by a positive ground_truth match, populate this. Null when the verifier could only judge by brief_excerpt OR when the verdict is unverified/inconclusive. Phase B step 8.5.resume uses this to drive the rescue-promotion path: a SHOULD claim that synthesizer rule 5b auto-downgraded from MUST gets restored to MUST when ground_truth_match.kind is non-null and status is verified.",
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["kind", "ref"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["file_verification", "already_done", "load_bearing"],
+              "description": "Which ground_truth section the match came from. file_verification = ground_truth.file_verifications[i] confirmed the claim's file/line/symbol. already_done = the claim cites work that ground_truth.already_done flagged as completed (rare positive case — the claim says 'X needs doing' and already_done says 'X exists' = unverified, not verified). load_bearing = ground_truth.load_bearing_facts_source[key] backs the claim's premise."
+            },
+            "ref": {
+              "type": "string",
+              "description": "Pointer into ground_truth that backs the verdict. Form is informational, e.g. 'file_verifications[3]' or 'load_bearing_facts_source.user_count_at_peak'. Used by 8.5.resume to construct the rescue audit trail and surface ground_truth provenance to the user."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

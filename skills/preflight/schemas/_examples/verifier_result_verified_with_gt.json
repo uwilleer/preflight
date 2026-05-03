@@ -1,0 +1,8 @@
+{
+  "status": "verified",
+  "note": "",
+  "ground_truth_match": {
+    "kind": "file_verification",
+    "ref": "file_verifications[3]"
+  }
+}

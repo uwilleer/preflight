@@ -386,7 +386,7 @@
         },
         "verification_round": {
           "type": "object",
-          "description": "Summary written by Phase B step 8.5. Absent on old runs or when skipped.",
+          "description": "Summary written by Phase B step 8.5. Absent on old runs or when skipped. v0.7.1+ adds rescued_should_to_must (ground-truth-rescue promotion path) — older runs omit the field; renderer guards on existence.",
           "properties": {
             "skipped": { "type": "boolean" },
             "reason": { "type": "string" },
@@ -394,7 +394,12 @@
             "verified": { "type": "integer", "minimum": 0 },
             "unverified": { "type": "integer", "minimum": 0 },
             "inconclusive": { "type": "integer", "minimum": 0 },
-            "demoted_must_to_should": { "type": "integer", "minimum": 0 }
+            "demoted_must_to_should": { "type": "integer", "minimum": 0 },
+            "rescued_should_to_must": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "v0.7.1+: count of SHOULD claims promoted back to MUST when verifier returned status=verified with non-null ground_truth_match AND the claim title carried the synthesizer rule-5b downgrade prefix. See sub-coordinator-phase-b.md step 8.5.resume rescue rule."
+            }
           }
         },
         "disputed_findings": {
