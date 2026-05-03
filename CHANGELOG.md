@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.6.5] — 2026-05-03
+
+Reverts the dedicated subagent-type escalation introduced in 0.6.2 and tweaked by PR #15 (which had no CHANGELOG bump). New empirical evidence: even with a custom subagent type registered as `(Tools: All tools)` in the agent registry, the `Agent` meta-tool is **stripped by the harness at spawn time**. Observed default toolset of a freshly-spawned `preflight-coordinator` subagent: `Bash, Edit, Read, ScheduleWakeup, Skill, ToolSearch, Write` — `Agent` neither active nor in the deferred-tools list, `ToolSearch select:Agent` returns "No matching deferred tools found". Both prior frontmatter shapes (PR #7 explicit array, PR #15 omitted) gave subsets of the harness's subagent-default toolset, never including `Agent`. The only subagent type observed to retain `Agent` is `general-purpose` (registered as `Tools: *` — the literal-asterisk form, not the "All tools" string). Conclusion: pinning the toolset via a custom agent file does not work for `Agent`, and continuing to ship the dedicated agent installs a required-but-broken symlink that misleads users.
+
+### Removed
+- **`agents/preflight-coordinator.md`** — deleted. The `agents/` directory is gone.
+- **README install step** for the agent symlink — the install section is now two lines: clone + skills symlink.
+
+### Changed
+- **`skills/preflight/SKILL.md`**: Phase A, B, C spawns reverted to `subagent_type: general-purpose` (three replacements).
+- **`meta-agents/sub-coordinator-phase-b.md` pre-flight check trace.** Updated to describe the actual harness behaviour (Agent is not reliably delivered to *any* subagent type) instead of pointing fingers at a specific frontmatter shape. The pre-flight check itself is unchanged — it still fail-fasts, just with an honest trace.
+
+### Kept
+- **Phase B and Phase C pre-flight Agent-tool checks** (added in 0.6.1) — these were always the load-bearing safety net. They correctly fail-fast when `Agent` is absent from the spawned subagent's toolset, regardless of the subagent_type. The 0.6.2 escalation that built atop them turned out to be ineffective, but the underlying check stays.
+
+### Why this release
+0.6.2 was based on the hypothesis that a custom agent file with `tools: [Agent, ...]` in frontmatter would force `Agent` into the spawned subagent's toolset. 0.6.4 (PR #15) tried the opposite — omit `tools:` to inherit "All tools". Neither worked: the failure mode reproduced in a fresh CC session right after PR #15 merged, with the spawned subagent reporting only 7 baseline tools and no `Agent`. The harness apparently has a policy that custom subagent types do not receive `Agent`, regardless of frontmatter — `general-purpose` is special-cased. Continuing to ship the dedicated agent file would only mislead users and waste an install step. Reverting to `general-purpose` puts us back where 0.6.1 left us: Phase B works on first spawn (Agent available), and the 0.6.1 pre-flight check fail-fasts loudly on the resume-spawn failure mode that originally motivated PR #7. We accept that rare failure mode as the lesser evil compared to "skill is broken on first run".
+
+### Migration
+Existing installations should remove the no-longer-needed agent symlink:
+
+```bash
+rm ~/.claude/agents/preflight-coordinator.md
+```
+
+Then start a fresh CC session. No workspace migration needed; in-flight workspaces from prior versions remain readable. If your CC session was started before this release and `_index.json.last_completed_step >= 6`, you can resume in the new session via `/preflight resume <workspace_path>`.
+
+### Known limitations (unchanged)
+- Resume-spawn loss of `Agent` (the failure mode 0.6.2 tried to fix) remains. Pre-flight check writes `phase-b-error.json` and main session can re-dispatch Phase B's steps inline if this happens.
+
 ## [0.6.3] — 2026-04-27
 
 Gate questions now surface trade-offs explicitly. Observed failure mode: the user defaults to picking option `[a]` because it sounds faster, not realizing `[b]` was the more thorough or load-bearing choice — the gate hid the cost-vs-coverage axis behind bare action labels. This release makes each `[x]` option carry mandatory `+` (what's gained) and `−` (what's given up) lines, so the trade-off dimension is visible at a glance instead of inferred from the option text.
