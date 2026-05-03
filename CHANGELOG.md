@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.4] — 2026-05-03
+
+Closes a small-panel groupthink blind spot in Phase B: the adversarial round (step 7.5) was gated by `panel < 4`, but the synthesizer surfaces the `correlated_bias_risk` warning banner already at `panel >= 3`. A 3-expert panel that converged on every finding therefore got the "all experts agreed without cross-role tension" banner without the actual concede/challenge round that would have either confirmed (concede) or surfaced disagreement (challenge). The banner without the round is half the signal — fixed by aligning the adversarial gate with the bias-risk threshold.
+
+### Changed
+- **`meta-agents/sub-coordinator-phase-b.md` step 7.5 skip condition.** Lowered panel threshold from `< 4` to `< 3` and finding threshold from `< 3` to `< 2`. New rule: skip adversarial only when panel size is binary (≤ 2 experts) OR there's nothing substantive to challenge (must+should < 2) OR the run opted out via `preflight_no_adversarial`. Both numeric thresholds now match `synthesizer.md`'s `correlated_bias_risk` rule (panel ≥ 3, must+should ≥ 2). The `preflight_no_adversarial` escape hatch is preserved.
+- **`docs/specs/2026-04-20-preflight-design.md` §7.5.** Re-stated the adversarial gate to match the new thresholds and made the alignment with `correlated_bias_risk` explicit (the previous spec text said "≥2 experts dispatched AND ≥1 cross-domain MUST or SHOULD" — older drift between spec and impl, now resolved).
+
+### Why this release
+Closes [#8](../../issues/8). Concrete failure mode: selector picks `security`, `performance`, `contrarian-strategist` (panel = 3); all three flag a single architectural choice in similar terms; synthesizer dedupes to 1 MUST + 1 SHOULD, sees `panel_size == 3` with no decisions and no untouched_concerns, emits `correlated_bias_risk: true` and the renderer prepends the warning banner. Under the old rule the adversarial round had been skipped (`panel < 4`), so the user got the banner without the round that the banner implies should have run. Under the new rule the round runs and either confirms (concede on both findings) or surfaces dissent (challenge), giving the banner real signal.
+
+### Cost
+Up to 3 extra `Agent` calls per 3-expert panel run (one per role re-dispatched into adversarial mode). At Haiku per-call cost the increment is negligible per run; the previous "save 3 calls" optimization bought a known anti-groupthink blind spot at the exact panel size where the synthesizer says we need it most.
+
+### Migration
+None. Existing workspaces and `_index.json` shape unchanged. `preflight_no_adversarial: true` still bypasses entirely. No schema changes.
+
 ## [0.6.3] — 2026-04-27
 
 Gate questions now surface trade-offs explicitly. Observed failure mode: the user defaults to picking option `[a]` because it sounds faster, not realizing `[b]` was the more thorough or load-bearing choice — the gate hid the cost-vs-coverage axis behind bare action labels. This release makes each `[x]` option carry mandatory `+` (what's gained) and `−` (what's given up) lines, so the trade-off dimension is visible at a glance instead of inferred from the option text.

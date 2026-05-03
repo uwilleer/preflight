@@ -103,7 +103,7 @@ Phase C (steps 10–11):                                               │
 
 **7. Parallel dispatch** — N `Agent` calls in one message, one per role. Expert model: Haiku for most; Opus opt-in for `security` and `contrarian-strategist`. Each expert receives `brief.md` + `context_pack.md` slice + `roles/<name>.md` + role-KB bullets. Expert returns `ExpertReport` JSON (must pass schema).
 
-**7.5 Adversarial round** *(gated)* — spawn one adversarial agent per expert. Each reviews the *other experts'* findings: may `concede`, `challenge`, `refine`, or `pass`. Output written to `expert_reports_post_adversarial/`. Gated by: ≥2 experts dispatched AND ≥1 cross-domain MUST or SHOULD finding exists. If skipped, Phase B synthesizes from `expert_reports/` directly.
+**7.5 Adversarial round** *(gated)* — spawn one adversarial agent per expert. Each reviews the *other experts'* findings: may `concede`, `challenge`, `refine`, or `pass`. Output written to `expert_reports_post_adversarial/`. Gated by: panel size ≥ 3 AND `must_fix + should_fix ≥ 2` (thresholds aligned with synthesizer's `correlated_bias_risk` rule — small panels are exactly where convergence-without-tension matters most). Escape hatch: `_index.json.preflight_no_adversarial == true`. If skipped, Phase B synthesizes from `expert_reports/` directly.
 
 **8. Drift pre-check + Synthesize** — re-hash files listed in `ground_truth.json`; if SHA differs → set `drift_refreshed: true`. Synthesizer: dedup (same root cause ∈ 60 chars), severity (MUST/SHOULD/NICE), conflict detection. `out_of_scope` from experts consumed as cross-confirmation / untouched-concern signal. Synthesizer receives artifact text directly (delimited by `<<ARTIFACT-START>>`…`<<ARTIFACT-END>>`).
 

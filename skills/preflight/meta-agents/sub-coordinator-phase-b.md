@@ -105,9 +105,11 @@ Update `_index.json.last_completed_step = 7`.
 ### 7.5 — Adversarial round (gated)
 
 **Skip condition:** skip the adversarial round if ANY of:
-- Total panel size < 4
-- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 3
+- Total panel size < 3 (binary panels can legitimately agree without flagging groupthink — same threshold the synthesizer uses for `correlated_bias_risk`)
+- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 2 (nothing substantive to challenge — same threshold the synthesizer uses for `correlated_bias_risk`)
 - `_index.json` contains `"preflight_no_adversarial": true` (escape hatch for cost-sensitive runs)
+
+These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bias_risk` rule (panel ≥ 3, must+should ≥ 2). The previous panel-< 4 cutoff produced runs where the synthesizer surfaced the "all experts agreed without cross-role tension" warning banner but the adversarial round that would have either confirmed (concede) or surfaced disagreement (challenge) had been skipped — the banner without the round is half the signal. A 3-expert panel with ≥ 2 surviving findings is exactly where adversarial concede/challenge has the highest ROI relative to its cost (3 extra `Agent` calls per panel of 3).
 
 If skipped: write `$WORKSPACE/adversarial_round.json` as `{"skipped": true, "reason": "<which condition>"}` and proceed to step 8 using the original expert reports.
 
