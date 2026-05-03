@@ -99,9 +99,9 @@ Phase C (steps 10–11):                                               │
 
 ### Phase B — dispatch, synth, render (sub-coordinator-phase-b.md)
 
-**Pre-flight check** — `ToolSearch("select:Agent")` before any step. If Agent tool absent → write `phase-b-error.json` and return immediately.
+**v0.7.0 architectural note.** Phase B coordinator no longer calls `Agent` itself — see `docs/specs/2026-05-03-phase-b-main-driven-dispatch.md`. The coordinator returns a `dispatch` handoff per Agent-needing step (7, 7.5, 8, 8.5); the main session executes the dispatched calls and re-spawns the coordinator with `resume_token`. Step 9 (render) stays inline in the coordinator. The pre-flight `Agent` check from 0.6.1 was removed in 0.7.0 (no longer load-bearing).
 
-**7. Parallel dispatch** — N `Agent` calls in one message, one per role. Expert model: Haiku for most; Opus opt-in for `security` and `contrarian-strategist`. Each expert receives `brief.md` + `context_pack.md` slice + `roles/<name>.md` + role-KB bullets. Expert returns `ExpertReport` JSON (must pass schema).
+**7. Parallel dispatch** — N `Agent` calls in one message, one per role, **executed by main session** under v0.7.0 (was: by coordinator subagent in v0.6.x). Expert model: Haiku for most; Opus opt-in for `security` and `contrarian-strategist`. Each expert receives `brief.md` + `context_pack.md` slice + `roles/<name>.md` + role-KB bullets. Expert returns `ExpertReport` JSON (must pass schema).
 
 **7.5 Adversarial round** *(gated)* — spawn one adversarial agent per expert. Each reviews the *other experts'* findings: may `concede`, `challenge`, `refine`, or `pass`. Output written to `expert_reports_post_adversarial/`. Gated by: ≥2 experts dispatched AND ≥1 cross-domain MUST or SHOULD finding exists. If skipped, Phase B synthesizes from `expert_reports/` directly.
 
@@ -113,7 +113,7 @@ Phase C (steps 10–11):                                               │
 
 ### Phase C — polish, KB (sub-coordinator-phase-c.md, background)
 
-**Pre-flight check** — `ToolSearch("select:Agent")` before step 10. If Agent tool absent AND neither polish nor compaction would run anyway → return non-error handoff. Otherwise → write `phase-c-error.json`.
+**v0.7.0 architectural note.** Phase C uses the same coordinator-state-machine + main-session-loop pattern as Phase B, with every coordinator spawn carrying `run_in_background: true`. The BG-loop pattern was probed and confirmed viable on 2026-05-03 (`skills/preflight/docs/notes/2026-05-03-phase-c-bg-loop-probe.md`). Pre-flight `Agent` check from 0.6.1 removed.
 
 **10. Polish (rubber-duck)** *(conditional)* — spawn rubber-duck subagent. Skip if `target_type ∈ {chat, inline}` OR `artifact_token_count < 4k`. Duck rewrites `report.md` preserving user's working language → `report.polished.md`.
 

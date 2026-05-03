@@ -111,41 +111,143 @@
         "user_language": {
           "type": "string",
           "description": "Same string passed to Phase A. Phase B passes it to the synthesizer (which renders user-facing strings in this language) and uses it to translate report.md section headings. Default 'English' when omitted."
+        },
+        "resume_token": {
+          "type": ["string", "null"],
+          "description": "v0.7.0+: set on coordinator re-spawns within a single Phase B run (after main has executed the previous dispatch's Agent calls and written results to workspace). The coordinator uses it (alongside _index.json.last_completed_step and which workspace files exist) to decide what to do next. null on first spawn."
         }
       }
     },
     "phase_b_output": {
+      "description": "v0.7.0 discriminated union by action. action='complete' is wire-compatible with v0.6.x (carries report_path, report, etc.). action='dispatch' is the new round-trip handoff: main executes the requested Agent calls, writes results to save_to paths, re-spawns coordinator with resume_token. action='error' carries error_path. See docs/specs/2026-05-03-phase-b-main-driven-dispatch.md.",
       "type": "object",
-      "required": ["workspace_path", "last_completed_step", "report_path"],
-      "additionalProperties": false,
+      "required": ["workspace_path", "last_completed_step", "action"],
       "properties": {
         "workspace_path": { "type": "string" },
         "last_completed_step": {
           "type": "integer",
-          "minimum": 7,
+          "minimum": 6,
           "maximum": 9,
-          "description": "Normal completion = 9 (report.md rendered)."
+          "description": "Highest pipeline step whose output is complete in workspace. May be 6 on first spawn (Phase A handoff just landed, nothing in Phase B done yet) — main session re-spawns the coordinator which then emits the step-7 dispatch."
         },
+        "action": {
+          "type": "string",
+          "enum": ["complete", "dispatch", "error"]
+        },
+
         "report_path": {
           "type": "string",
-          "description": "Absolute path to $WORKSPACE/report.md."
+          "description": "Absolute path to $WORKSPACE/report.md. Required when action=='complete'."
         },
         "report": {
           "type": "string",
           "maxLength": 15000,
-          "description": "Markdown body of report.md. Emit empty string AND report_too_long: true when report.md exceeds 15000 chars — main session falls back to reading from report_path."
+          "description": "Markdown body of report.md. Emit empty string AND report_too_long: true when report.md exceeds 15000 chars — main session falls back to reading from report_path. Only meaningful when action=='complete'."
         },
         "report_too_long": { "type": "boolean" },
         "skipped_experts": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Roles whose expert call failed twice and were dropped from synthesis."
+          "description": "Roles whose expert call failed twice and were dropped from synthesis. Only populated when action=='complete'."
         },
         "drift_refreshed": {
           "type": "boolean",
-          "description": "True when step-8 drift pre-check re-ran file_verifications/already_done against a moved HEAD."
+          "description": "True when step-8 drift pre-check re-ran file_verifications/already_done against a moved HEAD. Only populated when action=='complete'."
         },
-        "error_path": { "type": ["string", "null"] }
+
+        "dispatch": {
+          "$ref": "#/definitions/phase_b_dispatch",
+          "description": "Required when action=='dispatch'. Describes the batch of Agent calls main session must execute before re-spawning the coordinator."
+        },
+
+        "error_path": {
+          "type": ["string", "null"],
+          "description": "Required when action=='error'. Absolute path to $WORKSPACE/phase-b-error.json."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "complete" } }, "required": ["action"] },
+          "then": { "required": ["report_path"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "dispatch" } }, "required": ["action"] },
+          "then": { "required": ["dispatch"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "error" } }, "required": ["action"] },
+          "then": { "required": ["error_path"] }
+        }
+      ]
+    },
+    "phase_b_dispatch": {
+      "description": "v0.7.0+: dispatch handoff payload. Coordinator returns one of these to main; main executes the Agent calls and re-spawns coordinator with resume_token.",
+      "type": "object",
+      "required": ["step", "step_label", "parallelism", "requests", "resume_token"],
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "string",
+          "enum": ["7", "7.5", "8", "8.5"],
+          "description": "Pipeline step the dispatch corresponds to."
+        },
+        "step_label": {
+          "type": "string",
+          "description": "Human-readable step name for logs and telemetry, e.g. 'parallel-experts', 'adversarial-round', 'synthesizer', 'verification-mini-round'."
+        },
+        "parallelism": {
+          "type": "string",
+          "enum": ["parallel", "sequential"],
+          "description": "'parallel' = main sends single message with N Agent calls. 'sequential' = main sends them one at a time."
+        },
+        "requests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "subagent_type", "description", "prompt", "save_to", "on_failure"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable identifier (role name, claim id, etc.) used by coordinator on resume to map result files to logical units."
+              },
+              "subagent_type": {
+                "type": "string",
+                "description": "Subagent type for the Agent spawn. Always 'general-purpose' under v0.7.0."
+              },
+              "model_hint": {
+                "type": "string",
+                "description": "Model recommendation (e.g. 'haiku', 'sonnet', 'opus'). Main session passes this to Agent's model parameter. Per-task choice based on cognitive load."
+              },
+              "description": {
+                "type": "string",
+                "description": "Short description for the Agent spawn, e.g. 'Preflight expert: security'."
+              },
+              "prompt": {
+                "type": "string",
+                "description": "Complete prompt body. Coordinator has already done all assembly (role prompt + discipline blocks + role-KB + context_pack slice + delimited artifact). Main is a dumb executor — do NOT modify."
+              },
+              "save_to": {
+                "type": "string",
+                "description": "Absolute path. Main writes the Agent call's response there verbatim."
+              },
+              "schema_ref": {
+                "type": "string",
+                "description": "Optional JSON-schema reference (e.g. 'schemas/expert-report.json') the response should validate against. Informational — main does not enforce."
+              },
+              "on_failure": {
+                "type": "string",
+                "enum": ["mark_skipped", "abort"],
+                "description": "'mark_skipped' = main records failure in _index.json.dispatch[<id>] and continues. 'abort' = main stops the loop, surfaces error to user, no Phase C."
+              }
+            }
+          }
+        },
+        "resume_token": {
+          "type": "string",
+          "description": "Opaque string main passes back to coordinator on the next spawn. Coordinator uses it as a hint alongside workspace-file existence (which is the source of truth)."
+        }
       }
     },
     "phase_c_input": {
@@ -157,31 +259,104 @@
         "user_language": {
           "type": "string",
           "description": "Same string passed to Phases A and B. Phase C forwards it to the rubber-duck so polishing preserves the language the synthesizer already rendered. Default 'English' when omitted."
+        },
+        "resume_token": {
+          "type": ["string", "null"],
+          "description": "v0.7.0+: set on coordinator re-spawns within a single Phase C run (after main has executed the previous dispatch's Agent calls and written results to workspace). The coordinator uses it (alongside _index.json.last_completed_step and which workspace files exist) to decide what to do next. null on first spawn. BG_LOOP_OK confirmed by 2026-05-03 probe — see skills/preflight/docs/notes/2026-05-03-phase-c-bg-loop-probe.md."
         }
       }
     },
     "phase_c_output": {
+      "description": "v0.7.0 discriminated union by action. action='complete' is wire-compatible with v0.6.x (carries polished_report_path, duck_skipped, kb_summary). action='dispatch' is the new round-trip handoff for the rubber-duck (step 10) or KB compactor (step 11). action='error' carries error_path; Phase C errors are non-blocking — main surfaces but does not retract the report.",
       "type": "object",
-      "required": ["workspace_path", "last_completed_step"],
-      "additionalProperties": false,
+      "required": ["workspace_path", "last_completed_step", "action"],
       "properties": {
         "workspace_path": { "type": "string" },
         "last_completed_step": {
           "type": "integer",
-          "minimum": 10,
-          "maximum": 11
+          "minimum": 9,
+          "maximum": 11,
+          "description": "May be 9 on first spawn (Phase B handoff just landed, nothing in Phase C done yet)."
         },
+        "action": {
+          "type": "string",
+          "enum": ["complete", "dispatch", "error"]
+        },
+
         "polished_report_path": {
           "type": ["string", "null"],
-          "description": "Absolute path to report.polished.md, or null when the rubber-duck step was skipped (chat/inline target or < 4k artifact)."
+          "description": "Absolute path to report.polished.md, or null when the rubber-duck step was skipped (chat/inline target or < 4k artifact). Required when action=='complete'."
         },
         "duck_skipped": { "type": "boolean" },
         "kb_summary": {
           "type": "string",
           "maxLength": 500,
-          "description": "One-line summary for main session to surface: 'KB applied: <role1>:+N, ... · compacted: <roles>'."
+          "description": "One-line summary for main session to surface: 'KB applied: <role1>:+N, ... · compacted: <roles>'. Required when action=='complete'."
         },
-        "error_path": { "type": ["string", "null"] }
+
+        "dispatch": {
+          "$ref": "#/definitions/phase_c_dispatch",
+          "description": "Required when action=='dispatch'."
+        },
+
+        "error_path": {
+          "type": ["string", "null"],
+          "description": "Required when action=='error'. Absolute path to $WORKSPACE/phase-c-error.json."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "complete" } }, "required": ["action"] },
+          "then": { "required": ["kb_summary"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "dispatch" } }, "required": ["action"] },
+          "then": { "required": ["dispatch"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "error" } }, "required": ["action"] },
+          "then": { "required": ["error_path"] }
+        }
+      ]
+    },
+    "phase_c_dispatch": {
+      "description": "v0.7.0+: Phase C dispatch handoff payload. Same shape as phase_b_dispatch but step enum is restricted to ['10', '11'] and parallelism is typically 'sequential' (single rubber-duck call) or 'parallel' (one KB compactor call per role).",
+      "type": "object",
+      "required": ["step", "step_label", "parallelism", "requests", "resume_token"],
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "string",
+          "enum": ["10", "11"]
+        },
+        "step_label": {
+          "type": "string",
+          "description": "e.g. 'rubber-duck' or 'kb-compactor'."
+        },
+        "parallelism": {
+          "type": "string",
+          "enum": ["parallel", "sequential"]
+        },
+        "requests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "subagent_type", "description", "prompt", "save_to", "on_failure"],
+            "additionalProperties": false,
+            "properties": {
+              "id":            { "type": "string" },
+              "subagent_type": { "type": "string" },
+              "model_hint":    { "type": "string" },
+              "description":   { "type": "string" },
+              "prompt":        { "type": "string" },
+              "save_to":       { "type": "string" },
+              "schema_ref":    { "type": "string" },
+              "on_failure":    { "type": "string", "enum": ["mark_skipped", "abort"] }
+            }
+          }
+        },
+        "resume_token": { "type": "string" }
       }
     },
     "synth_result": {

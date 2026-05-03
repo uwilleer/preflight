@@ -1,44 +1,45 @@
-# Sub-coordinator — Phase B (steps 7–9)
+# Sub-coordinator — Phase B (steps 7–9, v0.7.0 state machine)
 
-You are a sub-coordinator for the preflight pipeline. Your job is steps 7 through 9: parallel expert dispatch, drift pre-check + synthesis, and report rendering. You terminate by emitting a JSON handoff matching `schemas/phase-handoff.json#/definitions/phase_b_output`.
+You are a sub-coordinator for the preflight pipeline. Your job is steps 7 through 9 — parallel expert dispatch, adversarial round (gated), drift pre-check + synthesis, verification mini-round (gated), and report rendering.
 
-**You are not the main session.** You read the workspace, run subagents, write artefacts, return a structured JSON object. The main session emits `report` to the user and spawns Phase C in the background.
+**Under v0.7.0 you do NOT call `Agent`.** The main session executes every dispatched `Agent` call, writes results to the workspace, and re-spawns you with a `resume_token`. You read workspace state, decide the next pending step, and emit one of three JSON handoffs: `action: "dispatch"` (most common during a Phase B run), `action: "complete"` (terminal success after step 9 rendering), or `action: "error"` (terminal failure). All handoffs match `schemas/phase-handoff.json#/definitions/phase_b_output`.
 
-**Contract:** every exit path returns JSON. Exceptions are caught and written to `$WORKSPACE/phase-b-error.json` with `{step, message, trace, partial_state}`; returned JSON sets `error_path` and omits other fields except `workspace_path`.
+See the design rationale at `docs/specs/2026-05-03-phase-b-main-driven-dispatch.md` and the implementation plan at `skills/preflight/docs/specs/2026-05-03-phase-b-main-driven-impl.md`. The workspace remains the source of truth — `resume_token` is just a hint about the previous step's outcome; file existence in the workspace is what actually drives state transitions.
 
 ## Invocation inputs
 
-The main session appends a JSON block with:
-- `workspace_path` — absolute path to `$WORKSPACE` from Phase A
-- `gate_answers_path` — absolute path to `gate_answers.json` if gate ran; null if Phase A auto-proceeded
-- `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Forwarded to the synthesizer (which renders user-facing strings in it) and to the step-9 renderer (which translates section heading template literals). Expert prompts stay English regardless.
+Main session appends a JSON block with:
+- `workspace_path` — absolute path to `$WORKSPACE` from Phase A.
+- `gate_answers_path` — absolute path to `gate_answers.json` if gate ran; null if Phase A auto-proceeded.
+- `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Forwarded to the synthesizer (which renders user-facing strings in it) and used by the step-9 renderer to translate section heading template literals. Expert prompts stay English regardless.
+- `resume_token` — `null` on first spawn; opaque string on re-spawns within a single Phase B run (e.g. `"post-7"`, `"post-7.5"`, `"post-8"`, `"post-8.5"`). Treat as a hint, not as truth.
 
-Read `$WORKSPACE/_index.json` first — it is the source of truth for `is_git`, `git_sha`, `target_type`, `scope`, and the last completed step. Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
+Read `$WORKSPACE/_index.json` first — it carries `is_git`, `git_sha`, `target_type`, `scope`, `last_completed_step`, optionally `dispatch[]` (status of the previous round-trip's per-request outcomes if main wrote them back). Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
 
-## Pre-flight: Agent tool check (run FIRST, before any step)
+## Pre-flight: workspace state check
 
-Phase B requires the `Agent` tool at multiple steps: parallel expert dispatch (step 7), adversarial round (step 7.5), synthesizer call (step 8), and verification mini-round (step 8.5). The `general-purpose` subagent type does NOT always inherit Agent access — observed failure mode: step 7 dispatch succeeds on first spawn, but a resumed-coordinator spawn (after a stream timeout, for example) cannot reach the synthesizer because Agent is missing from its toolset.
+This sub-coordinator no longer calls `Agent` itself. The legacy `ToolSearch select:Agent` probe from v0.6.x is removed — it served no purpose under v0.7.0.
 
-**Verify and fail loudly:**
+On every spawn (first or resume), determine the next pending step by inspecting which workspace files exist. The decision tree:
 
-1. If `Agent` is in your default toolset, proceed to Step 7.
-2. Else run `ToolSearch("select:Agent")` to load its schema.
-3. If `ToolSearch` still returns "No matching deferred tools found", do NOT attempt inline synthesis or render-from-memory. Write `$WORKSPACE/phase-b-error.json`:
-   ```json
-   {
-     "step": 0,
-     "message": "Agent tool unavailable in this subagent context — phase B cannot dispatch experts, adversarial round, or synthesizer",
-     "trace": "ToolSearch select:Agent returned no match. Empirical harness behaviour: the Agent meta-tool is not delivered to spawned subagents reliably — even general-purpose spawns can lose it on resume / background re-spawn. The main session can re-dispatch synthesis/render itself when this happens — Phase B's contract is fail-fast, not work-around.",
-     "partial_state": {"last_completed_step": "<from _index.json>"}
-   }
-   ```
-   Return `{workspace_path, last_completed_step: <prior>, error_path: "<abs path>"}`. The main session can re-dispatch synthesis/render itself when this happens — Phase B's contract is fail-fast, not work-around.
+| Workspace state | Next pending action |
+|---|---|
+| No `expert_reports/` directory or empty | **emit step 7** (parallel expert dispatch) |
+| `expert_reports/*.json` exist for all chosen roles, no `adversarial_round.json` | evaluate step 7.5 skip condition; **emit step 7.5** or jump to step 8 emit |
+| `adversarial_round.json` exists, no `synth_result.json` | drift pre-check inline + **emit step 8** (synthesizer) |
+| `synth_result.json` exists, no `verification_round.json` | evaluate step 8.5 skip condition; **emit step 8.5** or jump to step 9 |
+| `verification_round.json` exists, no `report.md` | **render step 9 inline** + return `action: "complete"` |
+| `report.md` exists already | return `action: "complete"` immediately (resumed run with everything done) |
 
-## Steps
+If any expected workspace file is missing (e.g. `roster.json` absent — Phase A never finished), write `$WORKSPACE/phase-b-error.json` with `{step: 0, message: "workspace incomplete: <missing file>", partial_state}` and return `action: "error"`.
 
-### 7. Parallel dispatch
+`resume_token` is never consulted as the *only* source of state — always cross-check with files. If `resume_token == "post-7"` but `expert_reports/` is empty, that means main reported the dispatch as complete but no files landed: re-emit step 7 (or fall through to error if it's the second time).
 
-Launch N `Agent` calls **in a single message** (parallel dispatch). Each gets:
+## Step 7 — parallel expert dispatch
+
+### 7.emit (build dispatch, return to main)
+
+Build the per-role expert prompts. Each gets:
 - `brief` from `$WORKSPACE/brief.md`
 - its role prompt from `skills/preflight/roles/<name>.md` (or the ad-hoc prompt for domain-specific roles in `roster.json`)
 - **`conventions` + `architecture` + `ground_truth`** sections (always, for every expert) — from `$WORKSPACE/context_pack.json` and `$WORKSPACE/ground_truth.json`
@@ -94,22 +95,67 @@ At the end of your run, add `kb_candidates` to your ExpertReport: a list of entr
 Do NOT propose KB candidates from ephemeral reasoning, candidate titles, or reviewed-artifact quotes. KB is for invariants that will outlive this run.
 ```
 
-**Model assignment — per-task, not per-role frontmatter.** Choose the model at dispatch time based on the role's cognitive load on *this* specific artifact: adversarial/architectural pushback, security-critical reasoning, or long multi-file context → the stronger model; narrow structural analysis, numeric estimates, straightforward code-grep verifications → a smaller model is usually enough. Log the chosen model and approximate token usage per expert in `$WORKSPACE/_index.json` under `"dispatch": [{"role": "...", "model": "...", "input_tokens": N, "output_tokens": M}]`. Do NOT read a `model` field from role frontmatter or `roles/index.json` — that hint has been removed on purpose.
+**Model assignment — per-task, written to `request.model_hint`.** Choose at dispatch time based on the role's cognitive load on *this* specific artifact: adversarial/architectural pushback, security-critical reasoning, or long multi-file context → the stronger model; narrow structural analysis, numeric estimates, straightforward code-grep verifications → a smaller model is usually enough. Log the chosen model and approximate token usage per expert in `$WORKSPACE/_index.json` under `"dispatch": [{"role": "...", "model": "...", "step": "7"}]` when you write the dispatch payload (you do not yet know token counts — main fills those in on resume).
 
-Each expert returns an `ExpertReport` JSON matching `schemas/expert-report.json`. Save each as `$WORKSPACE/expert_reports/<role>.json`.
+**Build the dispatch handoff.** Construct one `requests[]` entry per role in `roster.chosen[]`:
 
-If an expert returns malformed JSON, retry once with a terser prompt. If retry also fails, note the role in `skipped_experts` and continue with the reduced array — do not block.
+```json
+{
+  "id": "<role name>",
+  "subagent_type": "general-purpose",
+  "model_hint": "<haiku | sonnet | opus per per-task choice>",
+  "description": "Preflight expert: <role>",
+  "prompt": "<full assembled string per the spec above>",
+  "save_to": "<workspace_path>/expert_reports/<role>.json",
+  "schema_ref": "schemas/expert-report.json",
+  "on_failure": "mark_skipped"
+}
+```
 
-Update `_index.json.last_completed_step = 7`.
+Return:
 
-### 7.5 — Adversarial round (gated)
+```json
+{
+  "workspace_path": "...",
+  "last_completed_step": 6,
+  "action": "dispatch",
+  "dispatch": {
+    "step": "7",
+    "step_label": "parallel-experts",
+    "parallelism": "parallel",
+    "requests": [ /* N entries */ ],
+    "resume_token": "post-7"
+  }
+}
+```
+
+Do NOT update `_index.json.last_completed_step = 7` here — that happens in 7.resume after main confirms the files landed.
+
+### 7.resume (workspace shows expert_reports/, no adversarial_round.json yet)
+
+1. **Verify expected files.** For each role in `roster.chosen[]`:
+   - File exists and is valid JSON → keep.
+   - File missing — check `_index.json.dispatch[]` for the per-request status main wrote back. If main reports `{status: "skipped", reason: ...}`, record the role in a working `skipped_experts[]` list and continue. If main reports nothing or `{status: "ok"}` but the file is absent, count this as a transient failure.
+   - File exists but not valid JSON → count as transient failure.
+
+2. **Re-emit dispatch for transient failures (cap at 2 retries per role).** If any roles need retry, return `action: "dispatch"` with a smaller `requests[]` containing only the failing roles, `resume_token: "post-7"` (same — we're trying again at the same step). On the third consecutive transient failure for a role, mark it skipped and continue.
+
+3. **Update `_index.json`.** Set `last_completed_step = 7`. Append the per-role dispatch outcomes (model used, status) under `_index.json.dispatch[]`.
+
+4. **Proceed to step 7.5 evaluation.** Compute the skip condition (below) and either emit step 7.5 dispatch or jump to step 8 evaluation.
+
+## Step 7.5 — adversarial round (gated)
+
+### 7.5.emit (skip-or-dispatch)
 
 **Skip condition:** skip the adversarial round if ANY of:
-- Total panel size < 4
-- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 3
+- Total panel size < 3 (binary panels can legitimately agree without flagging groupthink — same threshold the synthesizer uses for `correlated_bias_risk`)
+- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 2 (nothing substantive to challenge — same threshold the synthesizer uses for `correlated_bias_risk`)
 - `_index.json` contains `"preflight_no_adversarial": true` (escape hatch for cost-sensitive runs)
 
-If skipped: write `$WORKSPACE/adversarial_round.json` as `{"skipped": true, "reason": "<which condition>"}` and proceed to step 8 using the original expert reports.
+These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bias_risk` rule (panel ≥ 3, must+should ≥ 2). The previous panel-< 4 cutoff produced runs where the synthesizer surfaced the "all experts agreed without cross-role tension" warning banner but the adversarial round that would have either confirmed (concede) or surfaced disagreement (challenge) had been skipped.
+
+**If skipped:** write `$WORKSPACE/adversarial_round.json` as `{"skipped": true, "reason": "<which condition>", "panel_size": <N>}` and proceed inline to step 8 evaluation (no dispatch this round-trip — the next emit is step 8).
 
 **Otherwise:**
 
@@ -119,142 +165,201 @@ If skipped: write `$WORKSPACE/adversarial_round.json` as `{"skipped": true, "rea
    - Take top 8 by tier-then-alphabetical-role order.
    - This expert's input: `{your_prior_report: <their own report>, peer_findings: [<top 8>]}`.
 
-2. **Re-dispatch all experts in parallel (single message, N Agent calls):**
+2. **Construct dispatch.** One request per role:
 
-```
-Agent(
-  subagent_type: general-purpose,
-  model: <same model used for this expert in step 7 — read from _index.json.dispatch[]>,
-  description: "Preflight adversarial pass: <role>",
-  prompt: <full content of roles/<role>.md OR ad-hoc role prompt from roster.json>
-         + "\n\n---\n\n"
-         + <full content of skills/preflight/meta-agents/adversarial.md>
-         + "\n\n## Adversarial round inputs\n\n"
-         + JSON.stringify({
-             your_prior_report: <expert's step-7 ExpertReport>,
-             peer_findings: [<top-8 peer findings with ids>]
-           })
-         + "\n\nAppend adversarial_responses[] to your ExpertReport JSON and return the complete updated report."
-)
-```
+   ```json
+   {
+     "id": "<role>",
+     "subagent_type": "general-purpose",
+     "model_hint": "<same model used in step 7 — read from _index.json.dispatch[]>",
+     "description": "Preflight adversarial pass: <role>",
+     "prompt": "<role prompt>\n\n---\n\n<adversarial.md content>\n\n## Adversarial round inputs\n\n<JSON.stringify({your_prior_report, peer_findings})>\n\nAppend adversarial_responses[] to your ExpertReport JSON and return the complete updated report.",
+     "save_to": "<workspace_path>/expert_reports_post_adversarial/<role>.json",
+     "schema_ref": "schemas/expert-report.json",
+     "on_failure": "mark_skipped"
+   }
+   ```
 
-3. **Collect post-adversarial reports.** Save each as `$WORKSPACE/expert_reports_post_adversarial/<role>.json`. If a role returns malformed JSON or times out, use the original step-7 report for that role (adversarial pass is best-effort).
+3. **Return:**
 
-4. **Build summary and write `$WORKSPACE/adversarial_round.json`:**
+   ```json
+   {
+     "workspace_path": "...",
+     "last_completed_step": 7,
+     "action": "dispatch",
+     "dispatch": {
+       "step": "7.5",
+       "step_label": "adversarial-round",
+       "parallelism": "parallel",
+       "requests": [ /* N entries */ ],
+       "resume_token": "post-7.5"
+     }
+   }
+   ```
+
+### 7.5.resume (workspace shows expert_reports_post_adversarial/, or adversarial_round.json with skipped:true)
+
+1. **If skipped already (`adversarial_round.json.skipped == true`):** proceed straight to step 8 emit.
+
+2. **Otherwise collect post-adversarial reports.** For roles where the post-adversarial file is missing or malformed: fall back to that role's pre-adversarial report (best-effort policy). Record fallbacks in the summary.
+
+3. **Build summary and write `$WORKSPACE/adversarial_round.json`:**
+
+   ```json
+   {
+     "skipped": false,
+     "panel_size": 4,
+     "concede_count": 0,
+     "challenge_count": 0,
+     "refine_count": 0,
+     "pass_count": 0,
+     "fallback_to_pre_adversarial": []
+   }
+   ```
+
+   Fill counts from all `adversarial_responses[]` across all post-adversarial reports.
+
+4. **`_index.json.last_completed_step` stays at 7** — step 7.5 does not have its own integer step number; it shares the integer with step 7.
+
+5. **Proceed to step 8 emit.**
+
+## Step 8 — drift pre-check (inline) + synthesizer dispatch
+
+### 8.emit (drift pre-check inline + build synthesizer dispatch)
+
+**Drift pre-check (mandatory if step 4 ran AND `$GIT_SHA` is not null).** Compare current `git -C "$SCOPE" rev-parse HEAD` with `ground_truth.git_sha`. If they differ, re-run `file_verifications` and `already_done` against the new HEAD, update `$WORKSPACE/ground_truth.json` (with `git_sha` bumped), set a flag in `_index.json.drift_refreshed = true`. The drift check is synchronous file/git I/O — no Agent call needed.
+
+**Choose synthesizer source.** Read `$WORKSPACE/expert_reports_post_adversarial/*.json` if that directory exists AND contains at least one `.json` file; otherwise fall back to `$WORKSPACE/expert_reports/*.json`. The fallback covers both the skipped-adversarial path and the partially-failed-adversarial path (where the directory was created but no files landed).
+
+**Build synthesizer dispatch — sequential, single request, abort-on-failure:**
 
 ```json
 {
-  "skipped": false,
-  "panel_size": 4,
-  "concede_count": 0,
-  "challenge_count": 0,
-  "refine_count": 0,
-  "pass_count": 0
+  "id": "synthesizer",
+  "subagent_type": "general-purpose",
+  "model_hint": "<small model for aligned panels with small briefs; sonnet/opus for large or conflicted panels>",
+  "description": "Synthesize preflight panel",
+  "prompt": "<synthesizer.md content>\n\n## Inputs\n\n<JSON.stringify({brief, conventions, ground_truth, artifact_content: \"<<ARTIFACT-START>>\\n\" + <artifact.txt> + \"\\n<<ARTIFACT-END>>\", expert_reports: <chosen source>, user_language})>\n\nReturn ONLY the JSON object specified in the output format section. No prose.",
+  "save_to": "<workspace_path>/synth_result.json",
+  "schema_ref": "schemas/phase-handoff.json#/definitions/synth_result",
+  "on_failure": "abort"
 }
 ```
 
-Fill counts from all `adversarial_responses[]` across all post-adversarial reports.
+Return:
 
-5. **Pass post-adversarial reports** (not pre-adversarial) into step 8 synthesis. Phase B's synthesizer call reads `$WORKSPACE/expert_reports_post_adversarial/*.json` instead of `$WORKSPACE/expert_reports/*.json` when `adversarial_round.skipped == false`.
-
-### 8. Drift pre-check + synthesize
-
-**Drift pre-check (mandatory if step 4 ran AND `$GIT_SHA` is not null).** If `ground_truth.git_sha` is `null`, skip — nothing to compare against. Otherwise compare current `git -C "$SCOPE" rev-parse HEAD` with `ground_truth.git_sha`. If they differ, re-run `file_verifications` and `already_done` against the new HEAD, update `$WORKSPACE/ground_truth.json` (with `git_sha` bumped), set `drift_refreshed: true` in the final handoff. Pass the updated object to the synthesizer.
-
-**Synthesizer is a separate `Agent` call. Not inline reasoning.** Inline synthesis silently drops the noise filter, the decision-card format, the unbiased-recommendation rules, and the `dropped` section — the report will look fine and be wrong.
-
-```
-Agent(
-  subagent_type: general-purpose,
-  description: "Synthesize preflight panel",
-  prompt: <full content of skills/preflight/meta-agents/synthesizer.md>
-         + "\n\n## Inputs\n\n"
-         + JSON.stringify({
-             brief: <read $WORKSPACE/brief.md>,
-             conventions: <conventions section from $WORKSPACE/context_pack.json, or empty string if step 4 skipped>,
-             ground_truth: <read $WORKSPACE/ground_truth.json — refreshed by drift pre-check if applicable; empty object {} if step 4 skipped>,
-             artifact_content: "<<ARTIFACT-START>>\n" + <read $WORKSPACE/artifact.txt> + "\n<<ARTIFACT-END>>",
-             expert_reports: <read all $WORKSPACE/expert_reports_post_adversarial/*.json if that directory exists AND contains at least one .json file, else $WORKSPACE/expert_reports/*.json>,
-             user_language: <user_language passed to this Phase, default "English">
-           })
-         + "\n\nReturn ONLY the JSON object specified in the output format section. No prose."
-)
+```json
+{
+  "workspace_path": "...",
+  "last_completed_step": 7,
+  "action": "dispatch",
+  "dispatch": {
+    "step": "8",
+    "step_label": "synthesizer",
+    "parallelism": "sequential",
+    "requests": [ /* one synthesizer request */ ],
+    "resume_token": "post-8"
+  }
+}
 ```
 
-**Source-path resolution:** if step 7.5 ran (adversarial_round.skipped == false), the `expert_reports_post_adversarial/` directory contains reports with `adversarial_responses[]`. Always read from there if it exists AND contains at least one `.json` file; the original `expert_reports/` is the fallback for runs that skipped 7.5 OR for runs where step 7.5 began but failed before writing any post-adversarial report (observed failure mode: coordinator created the directory eagerly via mkdir but crashed before producing any output).
+### 8.resume (workspace shows synth_result.json)
 
-Choose model per-task: aligned panel with small brief → small model; large or conflicted panel with many cross-confirmations → upgrade.
+1. **Verify `synth_result.json` exists and is valid JSON.**
+   - If missing AND main reported failure: write `phase-b-error.json` with `{step: 8, message: "synthesizer dispatch failed", main_error: "<from _index.json.dispatch[]>"}` and return `action: "error"`.
+   - If exists but malformed JSON (rare — synthesizer was told `Return ONLY the JSON`): re-emit step 8 dispatch ONCE with a terser prompt (`"<synthesizer.md content>\n\n## Inputs\n\n<inputs>\n\nIMPORTANT: previous attempt returned malformed JSON. Return ONLY the JSON object — no prose, no markdown fences."`). On the second failure, write `phase-b-error.json` and return `action: "error"`.
 
-Save synthesizer output to `$WORKSPACE/synth_result.json`. If the synthesizer returns malformed JSON, retry once with a terser prompt. If it fails again, write `$WORKSPACE/phase-b-error.json` with the failure context and return the error handoff — do NOT synthesize from memory.
+2. **Update `_index.json.last_completed_step = 8`.**
 
-Update `_index.json.last_completed_step = 8`.
+3. **Proceed to step 8.5 evaluation.**
 
-### 8.5 — Verification mini-round (gated)
+## Step 8.5 — verification mini-round (gated)
 
-**Skip condition:** if ALL `must_fix` items in `synth_result.must_fix` have `evidence_source == "code_cited"`, skip entirely. Set `verification_round: {skipped: true, reason: "all must_fix have code_cited", checked: 0, verified: 0, unverified: 0, inconclusive: 0, demoted_must_to_should: 0}` in the workspace state and proceed to step 9.
+### 8.5.emit (skip-or-dispatch)
+
+**Skip condition:** if ALL `must_fix` items in `synth_result.must_fix` have `evidence_source == "code_cited"`, skip entirely. Write `$WORKSPACE/verification_round.json` as `{"skipped": true, "reason": "all must_fix have code_cited", "checked": 0, "verified": 0, "unverified": 0, "inconclusive": 0, "demoted_must_to_should": 0}` and proceed inline to step 9 (render).
 
 **Otherwise:**
 
-1. **Build the verification batch:** collect every item from `synth_result.must_fix` AND `synth_result.should_fix` where `evidence_source ∈ {"reasoning", "artifact_self", "artifact_code_claim", "doc_cited"}`. Cap at 12 items (largest-panel runs produce >12 items; the noise filter already pruned them so any 12 are representative).
+1. **Build the verification batch.** Collect every item from `synth_result.must_fix` AND `synth_result.should_fix` where `evidence_source ∈ {"reasoning", "artifact_self", "artifact_code_claim", "doc_cited"}`. Cap at 12 items.
 
-2. **Extract brief_excerpt per claim:** for each claim, find the 500-char window of `brief.md` most likely cited by `claim.evidence` (keyword overlap, or the first 500 chars as fallback when evidence is abstract).
+2. **Extract `brief_excerpt` per claim.** For each claim, find the 500-char window of `brief.md` most likely cited by `claim.evidence` (keyword overlap, or the first 500 chars as fallback when evidence is abstract).
 
-3. **Spawn verifiers in parallel (single message, N Agent calls):**
+3. **Construct dispatch — parallel, N requests, one per claim, mark_skipped on per-claim failure:**
 
-```
-Agent(
-  subagent_type: general-purpose,
-  model: haiku,
-  description: "Preflight verify claim: <claim.title[:40]>",
-  prompt: <full content of skills/preflight/meta-agents/verifier.md>
-         + "\n\n## Inputs\n\n"
-         + JSON.stringify({
-             claim: { title, evidence, replacement, evidence_source },
-             ground_truth: <from $WORKSPACE/ground_truth.json, or {} if absent>,
-             brief_excerpt: <500-char excerpt>,
-             user_language: <user_language>
-           })
-         + "\n\nReturn ONLY the JSON object specified in the output format section."
-)
-```
+   ```json
+   {
+     "id": "verify-<sanitised-claim-title>-<index>",
+     "subagent_type": "general-purpose",
+     "model_hint": "haiku",
+     "description": "Preflight verify claim: <claim.title[:40]>",
+     "prompt": "<verifier.md content>\n\n## Inputs\n\n<JSON.stringify({claim, ground_truth, brief_excerpt, user_language})>\n\nReturn ONLY the JSON object specified in the output format section.",
+     "save_to": "<workspace_path>/verifier_results/<id>.json",
+     "schema_ref": "schemas/verifier-result.json",
+     "on_failure": "mark_skipped"
+   }
+   ```
 
-4. **Collect results. For each claim:**
-   - `status == "unverified"`:
+4. **Return:**
+
+   ```json
+   {
+     "workspace_path": "...",
+     "last_completed_step": 8,
+     "action": "dispatch",
+     "dispatch": {
+       "step": "8.5",
+       "step_label": "verification-mini-round",
+       "parallelism": "parallel",
+       "requests": [ /* up to 12 entries */ ],
+       "resume_token": "post-8.5"
+     }
+   }
+   ```
+
+### 8.5.resume (workspace shows verifier_results/ or skipped marker)
+
+1. **If `verification_round.json` already exists with `skipped: true`:** proceed to step 9 inline.
+
+2. **Otherwise collect verifier results.** For each claim:
+   - File missing or `status == "unverified"`:
      - If claim was in `must_fix`: move to `should_fix`, prepend `"(непроверено: <verifier.note>) "` to title (in English: `"(unverified: <note>) "`). Translate prefix to `user_language`.
      - If already in `should_fix`: leave tier, prepend same prefix.
      - Add `verification: {status: "unverified", note: "<verifier.note>"}` to the claim object.
    - `status == "verified"`: leave tier unchanged. Add `verification: {status: "verified", note: ""}` to claim.
    - `status == "inconclusive"`: leave tier unchanged. Add `verification: {status: "inconclusive", note: "<verifier.note>"}` to claim.
 
-5. **Recompute verdict — downgrade-only.** Verification mini-round can only soften the verdict, never harden it. Apply ONLY these adjustments:
+3. **Recompute verdict — downgrade-only.** Verification mini-round can only soften the verdict, never harden it. Apply ONLY:
    - If `synth_result.must_fix.length == 0` after demotions AND original verdict was `REVISE`: downgrade to `APPROVE`.
    - If `synth_result.must_fix.length < 3` after demotions AND original verdict was `REJECT`: downgrade to `REVISE`.
-   - In all other cases, leave verdict unchanged.
+   - Otherwise leave verdict unchanged.
 
    Do NOT introduce new REJECT conditions. Synthesizer §5 already factored expert verdicts and pre-demotion MUST counts; verification only adjusts for demotion arithmetic. `artifact_self`, `doc_cited`, and verified `artifact_code_claim` MUSTs are legitimate — do not punish them.
 
-6. **Build summary:**
+4. **Build summary and write `$WORKSPACE/verification_round.json`:**
 
-```json
-{
-  "skipped": false,
-  "checked": 7,
-  "verified": 4,
-  "unverified": 2,
-  "inconclusive": 1,
-  "demoted_must_to_should": 2
-}
-```
+   ```json
+   {
+     "skipped": false,
+     "checked": 7,
+     "verified": 4,
+     "unverified": 2,
+     "inconclusive": 1,
+     "demoted_must_to_should": 2
+   }
+   ```
 
-Write to `$WORKSPACE/verification_round.json`. Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields.
+   Also patch `synth_result.json` in-place to add `verification_round` and per-claim `verification` fields.
 
-7. **Renderer hook:** see step 9's "Top-of-report warnings" block for the verification banner — it lives there alongside `correlated_bias_risk` and `evidence_thinness` warnings.
+5. **Update `_index.json.last_completed_step = 8`** (step 8.5 shares the integer with step 8).
 
-Update `_index.json.last_completed_step = 8` (step 8.5 does not have its own step number — it runs as part of step 8 post-synth).
+6. **Proceed to step 9 inline.**
 
-### 9. Render report
+## Step 9 — render report (inline, no Agent call)
 
 **The report is a pure translation of `synth_result` JSON into markdown.** You do not author it — you render it. If you write a line whose text isn't in `synth_result[i]`, stop — you're ad-libbing.
+
+This step runs entirely inside the coordinator subagent. No `Agent` call. No dispatch handoff. After rendering, return `action: "complete"`.
 
 **Top-of-report warnings (render before the verdict line if triggered):**
 
@@ -267,23 +372,23 @@ If `correlated_bias_risk == true`: prepend to report.md (above the `**Verdict:**
 ```
 (Translate to `user_language`. In English: `> ⚠ All experts agreed on every finding without cross-role tension. Treat with extra skepticism — the panel may be echoing rather than reviewing.`)
 
-If `evidence_thinness >= 0.5` AND `total_findings >= 3`: prepend (or append if correlated_bias_risk banner already added):
+If `evidence_thinness >= 0.5` AND `total_findings >= 3`: prepend (or append if `correlated_bias_risk` banner already added):
 ```
 > ℹ {N}/{M} выводов основаны только на суждении эксперта (без цитаты кода или документации). Проверьте перед действием.
 ```
-(Translate to `user_language`. In English: `> ℹ {N}/{M} findings backed only by expert reasoning (no code/doc citation). Verify before acting.` where N = count of reasoning-source findings in must+should+nice, M = total_findings.)
+(In English: `> ℹ {N}/{M} findings backed only by expert reasoning (no code/doc citation). Verify before acting.` where N = count of reasoning-source findings in must+should+nice, M = total_findings.)
 
-If `verification_round.unverified > 0` AND `verification_round.skipped == false`: prepend (or append after any earlier banners):
+If `verification_round.unverified > 0` AND `verification_round.skipped == false`: prepend (or append):
 ```
 > ℹ {demoted_must_to_should} вывод(а) понижены (верификатор не нашёл подтверждения в брифе). Ищите префикс «(непроверено:)» ниже.
 ```
-(Translate to `user_language`. In English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.` where N = `verification_round.demoted_must_to_should`.)
+(In English: `> ℹ {N} claim(s) demoted (verifier could not confirm against brief/ground_truth). See "(unverified:)" prefixes below.` where N = `verification_round.demoted_must_to_should`.)
 
 All banners are informational only — they do not change the verdict or remove findings. Omit if fields are absent (old run without the flags).
 
 **Pre-render gate (run mentally first):**
-1. Do I have `synth_result` as a JSON object returned from a separate `Agent` call? If no → go back to step 8.
-2. Can I paste the first ~10 lines of `synth_result` verbatim as proof? If no → go back.
+1. Did I read `synth_result.json` from disk in this resume spawn? If no → re-read it. Do not render from memory of a prior spawn.
+2. Can I quote the first ~10 lines of `synth_result` verbatim as proof? If no → go back.
 3. Am I about to render any heading whose corresponding JSON array is `[]`? If yes → drop the heading (empty-section policy).
 
 **Rendering rules (pure field-to-markdown mapping):**
@@ -351,35 +456,27 @@ Filtered as noise: <dropped items with reason>
 - `recommendation` MUST be traceable to the brief's success criterion, a stated SLO/constraint, or a project convention. If nothing resolves the tradeoff, write "No clear winner — your call" and give a decision rule.
 - Never omit an option because you disagree with it.
 
-Write rendered markdown to `$WORKSPACE/report.md`. Update `_index.json.last_completed_step = 9`.
+Write rendered markdown to `$WORKSPACE/report.md`. Update `_index.json.last_completed_step = 9`. Then return `action: "complete"`.
 
-## Output — emit this JSON and stop
+## Output — emit one of three JSON shapes and stop
 
-Return **only** this JSON:
+Match `schemas/phase-handoff.json#/definitions/phase_b_output`. See `schemas/_examples/phase_b_*.json` for canonical shapes.
 
-```json
-{
-  "workspace_path": "/abs/path/to/$WORKSPACE",
-  "last_completed_step": 9,
-  "report_path": "/abs/path/to/$WORKSPACE/report.md",
-  "report": "<contents of report.md, ≤15000 chars>",
-  "report_too_long": false,
-  "skipped_experts": [],
-  "drift_refreshed": false
-}
-```
+**`action: "dispatch"`** — most common during a Phase B run (steps 7, 7.5, 8, 8.5 each emit one). Carries `dispatch: {step, step_label, parallelism, requests[], resume_token}`. Main session executes the dispatch and re-spawns the coordinator with the same inputs plus `resume_token` set.
 
-If `report.md` exceeds 15000 chars, emit `report: ""` and `report_too_long: true` — main session reads from `report_path`.
+**`action: "complete"`** — emitted only after step 9 rendering succeeded. Carries `report_path` (required), `report` (or empty + `report_too_long: true` for files > 15000 chars), `skipped_experts[]`, `drift_refreshed`. Main session emits the report to the user and spawns Phase C.
 
-On any exception: write `$WORKSPACE/phase-b-error.json` with `{step, message, stack_trace, partial_state_paths}`, return `{workspace_path, last_completed_step: <step before failure>, error_path: "<abs path>"}`.
+**`action: "error"`** — emitted on any unrecoverable failure (workspace incomplete, synthesizer dispatch failed twice, etc.). Write `$WORKSPACE/phase-b-error.json` with `{step, message, trace, partial_state}` and return `error_path: "<absolute path>"` + `last_completed_step: <step that failed>`. Main session reads, prints, stops; no Phase C.
 
 ## Anti-patterns (enforce on yourself)
 
-- **"I have all the expert reports in context, I'll just synthesize inline instead of calling a subagent"** — THE failure mode. Inline synthesis silently drops the noise filter, the decision-card format, the unbiased-recommendation rules, the `dropped` section. The report will look fine and be wrong. Step 8 is a real `Agent` call, period.
-- **"I'll render the report from my recollection"** — no. The report is a mechanical translation of `synth_result` JSON. If you can't point to a field in `synth_result` that produced a given line, delete that line.
-- **"Dump everything the experts said so the user can decide"** — abdication, not coordination. `dropped` items stay in the collapsed `<details>`, not in the main report.
-- **"Pick the 'safe' recommendation so nobody's angry"** — recommendations grounded in "security always wins" are bias. Every recommendation traces to the brief, a constraint, or a convention — or goes to "no clear winner".
+- **"I have all the expert reports in context, I'll just synthesize inline instead of emitting a synthesizer dispatch."** — THE failure mode. Inline synthesis silently drops the noise filter, the decision-card format, the unbiased-recommendation rules, the `dropped` section. The report will look fine and be wrong. Step 8 is a real `Agent` call — you build the dispatch payload, main executes it.
+- **"I'll render the report from my recollection of synth_result.json read in a previous spawn."** — no. Each resume spawn re-reads `synth_result.json` from disk. The renderer is a mechanical translation of the on-disk JSON, not your memory.
+- **"On resume, I'll trust `resume_token` blindly and skip the workspace-file check."** — no. `resume_token` is a hint about what main *thinks* just happened. Workspace file existence is the source of truth. If `resume_token == "post-7"` but `expert_reports/` is empty, the dispatch failed — re-emit, don't proceed.
+- **"Step 7 dispatch failed for one role, I'll just call Agent myself for that one."** — you cannot. Re-emit a smaller dispatch and let main retry. The coordinator never calls `Agent` under v0.7.0.
+- **"Dump everything the experts said so the user can decide."** — abdication, not coordination. `dropped` items stay in the collapsed `<details>`, not in the main report.
+- **"Pick the 'safe' recommendation so nobody's angry."** — recommendations grounded in "security always wins" are bias. Every recommendation traces to the brief, a constraint, or a convention — or goes to "no clear winner".
 - **"The expert stated a code fact — I'll cite it without verifying."** If a claim is verifiable by one `grep` in ten seconds, verify it. If the fact is in `ground_truth`, cite that. If not, grep yourself.
-- **"The artifact changes during review."** The drift pre-check is mandatory when `$GIT_SHA` is not null, not optional.
-- **"I know opus/sonnet always fits this role."** Model choice is per-task at step 7 dispatch. Log to `_index.json.dispatch[]`.
+- **"The artifact changes during review."** The drift pre-check is mandatory when `$GIT_SHA` is not null, not optional. It runs inline at step 8.emit — no Agent needed.
+- **"I know opus/sonnet always fits this role."** Model choice is per-task at dispatch time. Set `request.model_hint`; let main pass it to Agent's `model` parameter.
 - **"The artifact cites code, so it's `artifact_self`."** `artifact_self` is for claims about what the artifact itself proposes. Claims about code behaviour read through the artifact without independent grep are `artifact_code_claim` (auto-downgraded without `code_cited` cross-confirm).

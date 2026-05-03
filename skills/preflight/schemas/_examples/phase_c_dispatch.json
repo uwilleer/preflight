@@ -1,0 +1,22 @@
+{
+  "workspace_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan",
+  "last_completed_step": 9,
+  "action": "dispatch",
+  "dispatch": {
+    "step": "10",
+    "step_label": "rubber-duck",
+    "parallelism": "sequential",
+    "requests": [
+      {
+        "id": "rubber-duck",
+        "subagent_type": "general-purpose",
+        "model_hint": "haiku",
+        "description": "Polish preflight report",
+        "prompt": "<full rubber-duck prompt + report.md content>",
+        "save_to": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/report.polished.md",
+        "on_failure": "mark_skipped"
+      }
+    ],
+    "resume_token": "post-10"
+  }
+}

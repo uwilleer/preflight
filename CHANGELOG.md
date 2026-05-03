@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.7.0] — 2026-05-03
+
+Architectural shift to address the empirical reality discovered across PRs #7, #15, #17: **the `Agent` meta-tool is not delivered to spawned subagents in the current CC build, regardless of subagent type or frontmatter shape**. Phase B's parallel expert dispatch could not live in a coordinator subagent; the v0.5.0 design assumption (sub-coordinator owns the heavy work and returns a small handoff) was unworkable for any phase that needs `Agent`.
+
+This release adopts **V2 from the design spec (#18, design doc at `docs/specs/2026-05-03-phase-b-main-driven-dispatch.md`)**: phase coordinators become state machines over workspace files. The main session is the `Agent` executor. Per Phase B/C run, the coordinator is spawned multiple times (initial + once per dispatch round-trip); each spawn returns one of three handoffs — `action: "complete"` (terminal success), `action: "dispatch"` (main, please execute these N `Agent` calls and re-spawn me with `resume_token`), or `action: "error"` (terminal failure). Worst case Phase B: 5 coordinator spawns (initial + 4 round-trips for steps 7, 7.5, 8, 8.5). Worst case Phase C: 3 (initial + rubber-duck + KB compactor).
+
+### Added
+- **`docs/specs/2026-05-03-phase-b-main-driven-dispatch.md`** — design spec (merged via #18).
+- **`skills/preflight/docs/specs/2026-05-03-phase-b-main-driven-impl.md`** — task-by-task implementation plan (merged via #19).
+- **`skills/preflight/docs/notes/2026-05-03-phase-c-bg-loop-probe.md`** — probe result confirming `run_in_background: true` agents can be chained from the main session via the notification mechanism (`BG_LOOP_OK: true`). Phase C uses the same loop pattern as Phase B.
+- **`scripts/validate-handoff-examples.py`** + **`make test-handoff`** target — validates `schemas/_examples/phase_{b,c}_*.json` fixtures against the new schema, both positive and negative cases. Wired into `make test`.
+- **5 fixture files** under `skills/preflight/schemas/_examples/` covering `complete | dispatch | error` for both phases.
+- **`phase_b_dispatch` and `phase_c_dispatch` definitions** in `schemas/phase-handoff.json` describing the round-trip handoff payload (requests[], parallelism, resume_token, on_failure policy).
+
+### Changed
+- **`schemas/phase-handoff.json`** — `phase_b_output` and `phase_c_output` become discriminated unions keyed by `action`. `allOf + if/then` enforces required fields per branch (`report_path` / `kb_summary` for `complete`, `dispatch` for `dispatch`, `error_path` for `error`). `phase_{b,c}_input` gain optional `resume_token`. `additionalProperties: false` dropped on the new union shapes (incompatible with the conditional pattern).
+- **`meta-agents/sub-coordinator-phase-b.md`** — full rewrite. 0 `Agent()` calls (was 4). Each step has an `emit` section (build dispatch payload, return) and a `resume` section (verify result files landed, decide next step). Step 9 (render) stays inline in coordinator. Pre-flight `Agent` tool check from 0.6.1 removed — coordinator never calls Agent under v0.7.0; check is no longer load-bearing.
+- **`meta-agents/sub-coordinator-phase-c.md`** — same pattern. Step 10 (rubber-duck) and step 11 KB compaction become dispatches; KB apply (file I/O) stays inline. KB compaction uses staging-file pattern (`kb_compacted/<role>.md` then atomic overwrite) to protect personal KB from malformed compactor output.
+- **`SKILL.md`** Phase B handler — replaced single-spawn block with the dispatch-execute-respawn loop. Phase C handler — same loop with `run_in_background: true` on every spawn. Both spell out the parallel/sequential dispatch contract and the `on_failure` policy enforcement.
+- **`docs/specs/2026-04-20-preflight-design.md`** §7.5 / §8.5 / §10–11 — added v0.7.0 round-trip notes (one sentence each — the new wire shape lives in the new spec doc).
+
+### Removed
+- **The legacy "Pre-flight: Agent tool check" block** from both Phase B and Phase C coordinators. The check was added in 0.6.1 as a fail-fast safety net when the coordinator could not find `Agent` in its toolset. Under v0.7.0 the coordinator never calls `Agent`, so the check serves no purpose.
+
+### Defaults baked in (per design spec #18 open questions)
+- **Versioning:** 0.7.0 (not 1.0.0; we are still iterating).
+- **`on_failure` policy:** binary (`mark_skipped` / `abort`); no smart-retry-with-terser-prompt at the main-session level. Coordinator handles retry logic at the per-request level (e.g. synthesizer at step 8 gets one terser-prompt retry on malformed JSON).
+- **Audit `dispatch_plans/` files:** not implemented in v0.7.0. YAGNI until someone needs the audit trail; can be added later gated by `_index.json.preflight_audit_dispatch == true`.
+- **Phase A:** unchanged. Selector inline-fallback path stays — Phase A doesn't need the loop pattern because its only `Agent`-needing step (selector) has an inline-fallback.
+
+### Migration
+- Workspaces from v0.6.x remain readable. Coordinator's "what's the next pending step" logic only inspects file existence — pre-v0.7.0 workspaces with full state on disk produce `action: "complete"` immediately on first spawn (rendering from existing `synth_result.json`). `/preflight resume <old workspace>` works unchanged.
+- Users on 0.6.x do not need any local action. Just pull the new skill content; no symlinks to add or remove.
+
+### Known limitations
+- **Round-trip overhead.** Each Phase B run now incurs up to 4 extra coordinator spawns vs v0.6.x (which spawned the coordinator once). Each coordinator spawn re-reads `_index.json`, `brief.md`, `roster.json`, etc. — duplicated I/O cost. Coordinator model is Haiku (cheap) and the spawn overhead is small in absolute terms (~5–10k tokens per spawn), but a heavy panel may now use 30–50k of main-session context where v0.6.x used ~25k.
+- **Phase C BG loop is empirically validated, not formally specified.** The 2026-05-03 probe established that two-spawn BG chains work in current CC builds (see notes file). Three-spawn chains (Phase C worst case: initial + rubber-duck + compactor) are extrapolated from the two-spawn evidence. Re-probe if a real run shows notification chain breakage.
+- **Smoke test deferred.** Task 7 of the implementation plan calls for a manual `/preflight` smoke run against `evals/fixtures/plan-buggy-auth/` to confirm behaviour-equivalence at the workspace/output level. This needs a fresh CC session with the new skill loaded. Tracked separately.
+
 ## [0.6.5] — 2026-05-03
 
 Reverts the dedicated subagent-type escalation introduced in 0.6.2 and tweaked by PR #15 (which had no CHANGELOG bump). New empirical evidence: even with a custom subagent type registered as `(Tools: All tools)` in the agent registry, the `Agent` meta-tool is **stripped by the harness at spawn time**. Observed default toolset of a freshly-spawned `preflight-coordinator` subagent: `Bash, Edit, Read, ScheduleWakeup, Skill, ToolSearch, Write` — `Agent` neither active nor in the deferred-tools list, `ToolSearch select:Agent` returns "No matching deferred tools found". Both prior frontmatter shapes (PR #7 explicit array, PR #15 omitted) gave subsets of the harness's subagent-default toolset, never including `Agent`. The only subagent type observed to retain `Agent` is `general-purpose` (registered as `Tools: *` — the literal-asterisk form, not the "All tools" string). Conclusion: pinning the toolset via a custom agent file does not work for `Agent`, and continuing to ship the dedicated agent installs a required-but-broken symlink that misleads users.

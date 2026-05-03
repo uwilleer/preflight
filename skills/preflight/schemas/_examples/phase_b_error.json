@@ -1,0 +1,6 @@
+{
+  "workspace_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan",
+  "last_completed_step": 7,
+  "action": "error",
+  "error_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/phase-b-error.json"
+}
