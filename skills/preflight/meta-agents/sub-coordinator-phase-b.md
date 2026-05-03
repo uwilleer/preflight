@@ -28,7 +28,7 @@ Phase B requires the `Agent` tool at multiple steps: parallel expert dispatch (s
    {
      "step": 0,
      "message": "Agent tool unavailable in this subagent context — phase B cannot dispatch experts, adversarial round, or synthesizer",
-     "trace": "ToolSearch select:Agent returned no match. General-purpose subagents do not always inherit Agent access on resume. Re-spawn phase B from a context with confirmed Agent access (typically the main session) or escalate to a subagent_type with guaranteed Agent.",
+     "trace": "ToolSearch select:Agent returned no match. The preflight-coordinator subagent type inherits Agent from the parent skill orchestrator; if Agent is missing here, either the agent file's frontmatter declared an explicit tools: list that broke Agent schema loading, or the parent context dispatched to a different subagent_type. Re-spawn phase B from a context with confirmed Agent access (typically the main session).",
      "partial_state": {"last_completed_step": "<from _index.json>"}
    }
    ```
