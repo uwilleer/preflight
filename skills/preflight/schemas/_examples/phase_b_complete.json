@@ -1,0 +1,11 @@
+{
+  "workspace_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan",
+  "last_completed_step": 9,
+  "action": "complete",
+  "report_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/report.md",
+  "report": "## Preflight — sample-plan\n\n**Verdict:** REVISE — 2 must-fix items.\n\n### Must fix before coding (2)\n- Hardcoded API key in config — config/prod.yaml:14\n  → Move to env var; rotate the leaked key.\n- SQL injection via string interpolation — db/queries.py:88\n  → Use parameterised queries.\n\n<details>\n<summary>Panel and filtered (3 experts, 1 filtered)</summary>\n\nExperts: security, performance, api-design\nFiltered as noise: 1 generic-style finding (security: \"consider linting\" — too broad)\n</details>\n",
+  "report_too_long": false,
+  "skipped_experts": [],
+  "drift_refreshed": false,
+  "error_path": null
+}

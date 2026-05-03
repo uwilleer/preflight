@@ -1,0 +1,43 @@
+{
+  "workspace_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan",
+  "last_completed_step": 6,
+  "action": "dispatch",
+  "dispatch": {
+    "step": "7",
+    "step_label": "parallel-experts",
+    "parallelism": "parallel",
+    "requests": [
+      {
+        "id": "security",
+        "subagent_type": "general-purpose",
+        "model_hint": "sonnet",
+        "description": "Preflight expert: security",
+        "prompt": "<full assembled prompt — role + discipline blocks + role-KB + context_pack slice + delimited artifact>",
+        "save_to": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/expert_reports/security.json",
+        "schema_ref": "schemas/expert-report.json",
+        "on_failure": "mark_skipped"
+      },
+      {
+        "id": "performance",
+        "subagent_type": "general-purpose",
+        "model_hint": "haiku",
+        "description": "Preflight expert: performance",
+        "prompt": "<full assembled prompt>",
+        "save_to": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/expert_reports/performance.json",
+        "schema_ref": "schemas/expert-report.json",
+        "on_failure": "mark_skipped"
+      },
+      {
+        "id": "api-design",
+        "subagent_type": "general-purpose",
+        "model_hint": "haiku",
+        "description": "Preflight expert: api-design",
+        "prompt": "<full assembled prompt>",
+        "save_to": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/expert_reports/api-design.json",
+        "schema_ref": "schemas/expert-report.json",
+        "on_failure": "mark_skipped"
+      }
+    ],
+    "resume_token": "post-7"
+  }
+}

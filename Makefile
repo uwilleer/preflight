@@ -1,4 +1,4 @@
-.PHONY: build-index test-index sync-roles clean help
+.PHONY: build-index test-index test-handoff test sync-roles clean help
 
 SKILL_DIR := skills/preflight
 ROLES_DIR := $(SKILL_DIR)/roles
@@ -10,6 +10,8 @@ help:
 	@echo "  sync-roles    Fetch upstream community prompts and wrap for preflight."
 	@echo "  build-index   Regenerate $(INDEX) from roles/*.md frontmatter."
 	@echo "  test-index    Assert index is non-empty and schema-valid."
+	@echo "  test-handoff  Validate phase-handoff example fixtures (v0.7.0+)."
+	@echo "  test          Run all tests (test-index + test-handoff)."
 	@echo "  clean         Remove generated index."
 
 sync-roles:
@@ -44,6 +46,12 @@ test-index: build-index
 	@jq -e 'all(.[]; has("name") and has("when_to_pick") and has("tags"))' $(INDEX) >/dev/null \
 	  || { echo "FAIL: some roles missing required frontmatter fields (name, when_to_pick, tags)"; exit 1; }
 	@echo "OK: $(INDEX) has $$(jq 'length' $(INDEX)) valid roles"
+
+test-handoff:
+	@command -v uv >/dev/null 2>&1 || { echo "uv not installed (https://docs.astral.sh/uv/)"; exit 1; }
+	@./scripts/validate-handoff-examples.py
+
+test: test-index test-handoff
 
 clean:
 	@rm -f $(INDEX) $(INDEX).tmp

@@ -1,0 +1,9 @@
+{
+  "workspace_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan",
+  "last_completed_step": 11,
+  "action": "complete",
+  "polished_report_path": "/Users/example/.preflight/runs/example-deadbeef/20260503-1500-sample-plan/report.polished.md",
+  "duck_skipped": false,
+  "kb_summary": "KB applied: security:+2, performance:+1 · compacted: security",
+  "error_path": null
+}
