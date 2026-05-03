@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.1] — 2026-05-03
+
+Closes the verifier ground-truth visibility gap (issue #9). The verifier mini-round (Phase B step 8.5) already received `ground_truth` as input under v0.7.0, but its output had no formal way to surface a positive ground-truth match — the synthesizer's auto-downgrade arithmetic (rule 5b: `artifact_code_claim` → SHOULD without `code_cited` cross-confirm) stayed in effect even when the verifier had concrete ground-truth backing for the underlying fact. Result: load-bearing claims that ground_truth would verify came back as SHOULD with `(downgraded: …)` prefix, under-calling severity.
+
+This release adds an explicit **rescue-promotion path**: a SHOULD claim whose synthesizer-applied 5b downgrade prefix is intact AND whose verifier returned `status: "verified"` with non-null `ground_truth_match` is promoted back to MUST in step 8.5.resume. The downgrade prefix is stripped and a `(rescued: ground_truth.<ref>)` audit-trail prefix is appended. This is the **only** path where verification can promote a claim; all other adjustments stay downgrade-only. The verdict can never end stricter than the synthesizer's original — rescue at most restores it.
+
+### Added
+- **`schemas/verifier-result.json`** — the verifier's output was previously prose-only in `verifier.md`; now formally schema'd. The schema_ref already pointed at this file from `phase-b.md` step 8.5 emit; this release closes the dangling reference. New `ground_truth_match: {kind, ref} | null` field; `kind` enum: `file_verification | already_done | load_bearing`.
+- **2 new fixture files** under `schemas/_examples/`: `verifier_result_verified_with_gt.json` (positive ground-truth match) and `verifier_result_unverified.json` (null ground_truth_match). 4 new negative cases in `scripts/validate-handoff-examples.py`.
+- **`verification_round.rescued_should_to_must`** counter in `synth_result.json`'s `verification_round` summary. Renderer surfaces a top-of-report banner when > 0.
+
+### Changed
+- **`meta-agents/verifier.md`** — task section now explicitly distinguishes positive vs negative ground_truth checks. The verdict definitions clarify that `verified` includes positive matches against `file_verifications` / `load_bearing_facts_source`. Output spec gains `ground_truth_match` field with strict semantics ("set ONLY when status==verified AND verdict was influenced by positive ground_truth"). Two new anti-patterns: "setting `ground_truth_match` on `unverified`/`inconclusive`" and "treating ground_truth as exhaustive".
+- **`meta-agents/sub-coordinator-phase-b.md` step 8.5.resume** — per-claim handling rewritten as four explicit branches (file-missing/unverified, verified-no-gt, verified-with-gt, inconclusive). The verified-with-gt branch implements the rescue rule. Verdict recompute logic gains a "harden post-rescue" step (subject to the "never stricter than synthesizer's original" cap). Top-of-report banner block extended with a rescue banner.
+- **`schemas/phase-handoff.json` `synth_result.verification_round`** — adds optional `rescued_should_to_must` counter.
+
+### Why this release
+Issue #9's failure mode: synthesizer auto-downgrades a MUST whose `evidence_source` is `artifact_code_claim` (rule 5b). The verifier mini-round confirms via ground_truth that the underlying fact is real. Under v0.7.0 the verifier's `verified` verdict left the tier alone — the SHOULD persisted with its `(downgraded: …)` prefix even though the very layer that should resolve the downgrade (ground_truth) had spoken. Under v0.7.1 the rescue path closes this loop: `code_cited` cross-confirm via another expert and `verified-via-ground_truth` are now functionally equivalent for restoring tier. Anti-hallucination chain stays strong without under-calling load-bearing findings.
+
+### Migration
+None. Schema changes are additive; old `verification_round` JSON without `rescued_should_to_must` stays valid. Old verifier outputs without `ground_truth_match` stay valid (the renderer guards on field existence). No workspace migration needed.
+
+### Closes
+- Issue #9 — verifier mini-round (8.5) has no access to ground_truth — weakens anti-hallucination chain.
+
 ## [0.7.0] — 2026-05-03
 
 Architectural shift to address the empirical reality discovered across PRs #7, #15, #17: **the `Agent` meta-tool is not delivered to spawned subagents in the current CC build, regardless of subagent type or frontmatter shape**. Phase B's parallel expert dispatch could not live in a coordinator subagent; the v0.5.0 design assumption (sub-coordinator owns the heavy work and returns a small handoff) was unworkable for any phase that needs `Agent`.
