@@ -22,9 +22,12 @@ Evaluation suite for the `preflight` skill.
 `grading.json` is frozen by git tag `evals-grading-v1` **before** the first preflight run.
 Any revision requires a new tag (`evals-grading-v2`) with documented rationale.
 
-> **Note (v2 pending):** `plan-swallowed-errors` and `plan-silent-worker` were added
-> after the `evals-grading-v1` freeze to cover the new `error-handling` and
-> `observability` roles. Tag `evals-grading-v2` before the next scoring run.
+> **Note:** `plan-swallowed-errors` and `plan-silent-worker` were added after the
+> `evals-grading-v1` freeze to cover the new `error-handling` and `observability`
+> roles. The v1 baseline still scores the original 8 fixtures; the 2 new ones
+> are baseline candidates for whenever an `evals-grading-v2` tag is cut. Adding
+> them does not invalidate v1 scoring runs (different fixture set, scored
+> separately).
 
 ## Running
 

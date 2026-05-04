@@ -64,7 +64,9 @@ context_sections: [conventions, architecture]
 
 Required fields: `name`, `when_to_pick`, `tags`, `skip_when`, `model`, `context_sections`.
 
-`model` must be `sonnet` or `opus`. Use `opus` only for roles that require adversarial reasoning (security, contrarian). Everything else: `sonnet`.
+`model` must be `sonnet` or `opus`. Use `opus` only for roles that require adversarial reasoning (security, contrarian). Everything else: `sonnet`. **`haiku` is not allowed for roles** — every role is a judgment task (severity calls, evidence discipline, dedup vs. existing findings) and a sonnet floor is the project-wide policy. Haiku is reserved for mechanical text transforms (currently only the KB compactor in Phase C step 11).
+
+The frontmatter `model` is an **advisory hint** — the actual per-dispatch choice is made by the Phase B coordinator based on the panel composition and the artifact's cognitive load, then logged to `_index.json.dispatch[].model`. The selector deliberately does not forward role-level `model` (`meta-agents/selector.md`). Set the hint correctly anyway: it documents your intent and tooling (e.g. `make build-index`) reads it.
 
 `context_sections` lists which parts of the context pack this role needs. Available: `conventions`, `architecture`, `api_surface`, `data_flows`, `storage`, `external_deps`.
 
