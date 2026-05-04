@@ -14,6 +14,7 @@ from jsonschema import Draft7Validator, RefResolver
 
 SCHEMA_PATH = Path("skills/preflight/schemas/phase-handoff.json")
 VERIFIER_SCHEMA_PATH = Path("skills/preflight/schemas/verifier-result.json")
+SYNTH_SCHEMA_PATH = Path("skills/preflight/schemas/synth-result.json")
 EXAMPLES_DIR = Path("skills/preflight/schemas/_examples")
 
 POSITIVE_CASES = [
@@ -28,6 +29,8 @@ POSITIVE_CASES = [
 STANDALONE_CASES = [
     ("verifier_result_verified_with_gt.json", VERIFIER_SCHEMA_PATH),
     ("verifier_result_unverified.json", VERIFIER_SCHEMA_PATH),
+    ("synth_result_aligned.json", SYNTH_SCHEMA_PATH),
+    ("synth_result_bias_flagged.json", SYNTH_SCHEMA_PATH),
 ]
 
 NEGATIVE_CASES = [
@@ -99,6 +102,72 @@ STANDALONE_NEG_CASES = [
         "verifier_result ground_truth_match bad kind enum",
         VERIFIER_SCHEMA_PATH,
         {"status": "verified", "note": "", "ground_truth_match": {"kind": "wat", "ref": "x"}},
+    ),
+    (
+        "synth_result missing correlated_bias_risk",
+        SYNTH_SCHEMA_PATH,
+        {
+            "verdict": "APPROVE", "panel": ["security"],
+            "must_fix": [], "should_fix": [], "nice_fix": [],
+            "decisions": [], "untouched_concerns": [], "dropped": [],
+            "skipped_experts": [], "evidence_thinness": 0.0, "disputed_findings": []
+        },
+    ),
+    (
+        "synth_result evidence_thinness out of range",
+        SYNTH_SCHEMA_PATH,
+        {
+            "verdict": "APPROVE", "panel": ["security"],
+            "must_fix": [], "should_fix": [], "nice_fix": [],
+            "decisions": [], "untouched_concerns": [], "dropped": [],
+            "skipped_experts": [],
+            "correlated_bias_risk": False, "evidence_thinness": 1.5,
+            "disputed_findings": []
+        },
+    ),
+    (
+        "synth_result bad verdict enum",
+        SYNTH_SCHEMA_PATH,
+        {
+            "verdict": "MAYBE", "panel": ["security"],
+            "must_fix": [], "should_fix": [], "nice_fix": [],
+            "decisions": [], "untouched_concerns": [], "dropped": [],
+            "skipped_experts": [],
+            "correlated_bias_risk": False, "evidence_thinness": 0.0,
+            "disputed_findings": []
+        },
+    ),
+    (
+        "synth_result panel entry must be string not object",
+        SYNTH_SCHEMA_PATH,
+        {
+            "verdict": "APPROVE",
+            "panel": [{"role": "security", "verdict": "APPROVE", "weight": 1}],
+            "must_fix": [], "should_fix": [], "nice_fix": [],
+            "decisions": [], "untouched_concerns": [], "dropped": [],
+            "skipped_experts": [],
+            "correlated_bias_risk": False, "evidence_thinness": 0.0,
+            "disputed_findings": []
+        },
+    ),
+    (
+        "synth_finding missing reporters",
+        SYNTH_SCHEMA_PATH,
+        {
+            "verdict": "REVISE", "panel": ["security"],
+            "must_fix": [
+                {
+                    "title": "X", "evidence": "Y", "replacement": "Z",
+                    "evidence_source": "code_cited",
+                    "cross_confirmed": False
+                }
+            ],
+            "should_fix": [], "nice_fix": [],
+            "decisions": [], "untouched_concerns": [], "dropped": [],
+            "skipped_experts": [],
+            "correlated_bias_risk": False, "evidence_thinness": 0.0,
+            "disputed_findings": []
+        },
     ),
 ]
 

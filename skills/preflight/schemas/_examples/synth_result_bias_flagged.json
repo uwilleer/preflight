@@ -1,0 +1,40 @@
+{
+  "verdict": "REVISE",
+  "panel": ["security", "performance", "api-design"],
+  "must_fix": [
+    {
+      "title": "Auth state mutation outside the auth module",
+      "evidence": "spec §4.1 mutates session.role from /admin/escalate; reasoning: violates auth boundary",
+      "replacement": "route role mutations through auth.authorize() helper",
+      "evidence_source": "reasoning",
+      "reporters": ["security"],
+      "cross_confirmed": false
+    },
+    {
+      "title": "N+1 query in /admin/users listing",
+      "evidence": "spec §4.3 loops users.each { |u| u.permissions.load }; reasoning: 1+N round-trips",
+      "replacement": "eager-load via includes(:permissions)",
+      "evidence_source": "reasoning",
+      "reporters": ["performance"],
+      "cross_confirmed": false
+    }
+  ],
+  "should_fix": [
+    {
+      "title": "Inconsistent endpoint naming /admin/escalate vs /users/promote",
+      "evidence": "spec §2 lists both; reasoning: same verb, different namespaces",
+      "replacement": "settle on one verb (recommend /users/{id}/role) and document",
+      "evidence_source": "reasoning",
+      "reporters": ["api-design"],
+      "cross_confirmed": false
+    }
+  ],
+  "nice_fix": [],
+  "decisions": [],
+  "untouched_concerns": [],
+  "dropped": [],
+  "skipped_experts": [],
+  "correlated_bias_risk": true,
+  "evidence_thinness": 1.0,
+  "disputed_findings": []
+}

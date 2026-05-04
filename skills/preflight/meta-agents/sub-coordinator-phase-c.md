@@ -118,21 +118,7 @@ All of the above is synchronous file I/O — the coordinator does it inline, no 
 
 If NO files match the compaction criteria: update `_index.json.last_completed_step = 11`, return `action: "complete"` with the final `kb_summary`.
 
-If one or more files need compaction, build a parallel compaction dispatch (one request per file). The KB-compactor prompt is inline (there is no separate `meta-agents/kb-compactor.md` file — see issue #12 for a future split):
-
-**KB-compactor inline prompt:**
-
-```
-You are compacting an accumulated role-KB file. Input is a single markdown file with a `## Entries` section containing bullet items, each with a `last_verified <sha, date>` tag. Your output is a rewritten KB file with the same overall structure.
-
-Operations to apply:
-1. Dedup bullets that say the same thing in different words — keep the one with the newest `last_verified`.
-2. Consolidate 3+ related bullets under a shared subsection (h3) when natural.
-3. Drop entries older than 90 days that were never `confirm-refresh`'d (no recent date in the tag).
-4. Preserve `~~deprecated~~` strikethroughs verbatim — those are intentional history markers.
-
-Return ONLY the rewritten markdown. No commentary, no JSON wrapper.
-```
+If one or more files need compaction, build a parallel compaction dispatch (one request per file). The compactor lives in `meta-agents/kb-compactor.md` (extracted in PR #25 to match the standard meta-agent layout).
 
 Build one request per role to compact:
 
@@ -142,7 +128,7 @@ Build one request per role to compact:
   "subagent_type": "general-purpose",
   "model_hint": "haiku",
   "description": "Compact role-KB: <role>  (haiku ok — sole mechanical-transform task in the pipeline: dedup + reformat by fixed schema, no severity calls)",
-  "prompt": "<KB-compactor inline prompt>\n\n## Input KB\n\n<verbatim KB file content>",
+  "prompt": "<full content of meta-agents/kb-compactor.md>\n\n## Input KB\n\n<verbatim KB file content>",
   "save_to": "<workspace_path>/kb_compacted/<role>.md",
   "on_failure": "mark_skipped"
 }

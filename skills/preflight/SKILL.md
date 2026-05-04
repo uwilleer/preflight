@@ -230,10 +230,13 @@ If `last_completed_step == 11`, the run is already complete — read `report.pol
 - `meta-agents/synthesizer.md` — dedup + severity + conflict detection (called by Phase B)
 - `meta-agents/rubber-duck.md` — final polish (called by Phase C)
 - `meta-agents/verifier.md` — single-claim verifier (called by Phase B step 8.5; sonnet floor — ground-truth lookups are judgment, not pattern matching)
+- `meta-agents/kb-compactor.md` — role-KB dedup + consolidate + drop-stale (called by Phase C step 11; haiku ok — sole mechanical-transform task)
 - `meta-agents/adversarial.md` — concede/challenge/refine prompt fragment (appended to expert prompts at Phase B step 7.5)
 - `roles/*.md` — expert prompt catalog (run `make build-index` to refresh `roles/index.json`)
 - `roles/signals/*.yaml` — signal-group checklists: `auth`, `sql`, `frontend`, `terraform`, `api` — augmenters mixed into role-KB by selector + Phase A
 - `roles/signals/README.md` — signal-augmenter contract (matchers, wiring, how to add new groups)
 - `schemas/expert-report.json` — JSON-schema every expert must obey
+- `schemas/synth-result.json` — strict canonical contract for synthesizer output (Phase B step 8)
+- `schemas/verifier-result.json` — verifier output contract (Phase B step 8.5)
 - `schemas/phase-handoff.json` — main-session ↔ phase handoff contract
 - Design spec: `docs/specs/2026-04-20-preflight-design.md`

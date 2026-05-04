@@ -241,7 +241,7 @@ These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bi
   "description": "Synthesize preflight panel",
   "prompt": "<synthesizer.md content>\n\n## Inputs\n\n<JSON.stringify({brief, conventions, ground_truth, artifact_content: \"<<ARTIFACT-START>>\\n\" + <artifact.txt> + \"\\n<<ARTIFACT-END>>\", expert_reports: <chosen source>, user_language})>\n\nReturn ONLY the JSON object specified in the output format section. No prose.",
   "save_to": "<workspace_path>/synth_result.json",
-  "schema_ref": "schemas/phase-handoff.json#/definitions/synth_result",
+  "schema_ref": "schemas/synth-result.json",
   "on_failure": "abort"
 }
 ```
