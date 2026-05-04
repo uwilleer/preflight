@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+Documentation actualization after v0.7.x and a project-wide model selection policy. No schema or wire-shape changes; safe to pull without migration.
+
+### Added
+- **`docs/architecture.md`** — single-page entry point for new contributors. Three-actor table (main session vs sub-coordinators vs experts), v0.7.0 dispatch-loop diagram, workspace layout reference, model selection policy, contributor map ("you want to X → look at Y"), short design rationale. Closes issue #11.
+- **Model selection policy block in `SKILL.md`** ("Model selection policy" section, after "Output language") — sonnet floor for every judgment task; haiku reserved for mechanical text transforms (KB compactor only); opus for adversarial roles or large/conflicted synthesis. Per-task choice still lives in `request.model_hint`.
+
+### Changed
+- **Haiku→Sonnet floor enforced across the pipeline.** Phase B and Phase C coordinator models bumped from "Haiku is sufficient" to **sonnet floor** — empirically the dispatch payloads they build are load-bearing input to every expert that follows, and haiku gets the per-request `model_hint` / `subagent_type` calls wrong often enough to matter. Verifier mini-round (step 8.5) bumped to sonnet floor — ground-truth lookups are judgment, not pattern matching. Synthesizer and rubber-duck `model_hint` guidance updated to forbid haiku. KB compactor (Phase C step 11) **stays on haiku** — sole mechanical-transform task in the pipeline (dedup + reformat by fixed schema, no severity calls). Files touched: `SKILL.md`, `meta-agents/sub-coordinator-phase-{b,c}.md`, `meta-agents/verifier.md`.
+- **`README.md`** — Numbers section: `~25k main-session context` → `~50k` with v0.7.0 round-trip-overhead note; `8 fixtures` → `10 fixtures (4 real / 4 synthetic / 1 injection / 1 control)`; pipeline diagram block now spells out the dispatch-loop state machine (5-spawn worst case Phase B, 3-spawn Phase C) and links to `docs/architecture.md`. Cost line gains the model selection policy summary.
+- **`CONTRIBUTING.md`** — role frontmatter `model` documented as an **advisory hint** (selector strips it; coordinator decides per-dispatch). `haiku` explicitly disallowed for roles.
+- **`evals/README.md`** — "Note (v2 pending)" rewritten: v1 baseline still scores the original 8 fixtures unchanged; the 2 new fixtures (`plan-swallowed-errors`, `plan-silent-worker`) are baseline candidates for whenever an `evals-grading-v2` tag is cut, scored separately in the meantime.
+- **`docs/issues-found.md`** — replaced with redirect-stub pointing at GitHub issues. Original 2026-04-20 Milestone 2 smoke-run notes preserved in git history.
+
+### Fixed
+- **`meta-agents/sub-coordinator-phase-a.md`** `render_too_long` threshold bumped 4000 → 8000 chars. Coordinator was over-flagging short gates (~2700 chars) and forcing a redundant main-session re-Read of `gate.md`. (From issue #23 P0.)
+- **`~/.claude/settings.json` user policy** (out-of-tree, documented for adopters) — `Bash(mkdir -p .preflight/**)` and `Bash(mkdir -p **/.preflight/**)` should be in the allowlist alongside `Write(**/.preflight/**)` to avoid first-spawn approval prompts on workspace creation. The original blocker was `Bash(mkdir *)` in the `ask` list — Write was already allowed but mkdir wasn't.
+
+### Closes
+- Issue #11 — no architecture overview / new-contributor entry point.
+- Issue #23 P0 items — first-spawn mkdir approval prompt and `render_too_long` over-flagging.
+
 ## [0.7.1] — 2026-05-03
 
 Closes the verifier ground-truth visibility gap (issue #9). The verifier mini-round (Phase B step 8.5) already received `ground_truth` as input under v0.7.0, but its output had no formal way to surface a positive ground-truth match — the synthesizer's auto-downgrade arithmetic (rule 5b: `artifact_code_claim` → SHOULD without `code_cited` cross-confirm) stayed in effect even when the verifier had concrete ground-truth backing for the underlying fact. Result: load-bearing claims that ground_truth would verify came back as SHOULD with `(downgraded: …)` prefix, under-calling severity.

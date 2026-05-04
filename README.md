@@ -53,9 +53,9 @@ Three things to notice:
 ## Numbers that matter
 
 - **12 catalog roles** + ad-hoc domain roles generated inline by the Selector when no catalog role fits.
-- **~25k main-session context per run** — three-phase sub-coordinator design isolates pipeline work in subagents (added in v0.5.0). Was 80–150k inline.
-- **6–20 min wallclock** per run; Phase B (panel + synth) is the long part. Phase C (KB + polish) runs in background.
-- **$0.5–$3 per run** depending on roster size and per-task model choices.
+- **~50k main-session context per run** — three-phase sub-coordinator design isolates pipeline work in subagents. Was 80–150k inline; v0.7.0 dispatch-loop architecture adds round-trip overhead vs. v0.6.x's ~25k single-spawn cost (necessary because `Agent` isn't delivered to spawned subagents in current CC builds — main session is the executor).
+- **6–20 min wallclock** per run; Phase B (panel + synth + verifier mini-round) is the long part. Phase C (rubber-duck polish + KB compaction) runs in background.
+- **$0.5–$3 per run** depending on roster size and per-task model choices. Sonnet floor for judgment tasks; haiku reserved for mechanical text transforms (KB compactor only).
 
 ## Install
 
@@ -112,7 +112,9 @@ Role-KB load
 Human gate ──────────►  user answers ──────────►  report.md ───────────►  kb_summary
 ```
 
-Each phase is a separate `Agent` subagent call. Main session sees only structured JSON handoffs (`schemas/phase-handoff.json`), never the contents of expert reports or context packs. **Human gate is on by default** — you see the proposed panel and outstanding contradictions before any expert runs.
+Phase A is a single `Agent` subagent call. **Phase B and Phase C are dispatch-loop state machines** under v0.7.0 — the coordinator returns one of `complete | dispatch | error` per spawn; on `dispatch`, the main session executes the requested `Agent` calls (parallel or sequential per the request) and re-spawns the coordinator with `resume_token`. Worst case: 5 coordinator spawns for B (initial + 4 round-trips for steps 7, 7.5, 8, 8.5), 3 for C (initial + rubber-duck + compactor). This works around the empirical limitation that `Agent` is not delivered to spawned subagents in current CC builds — only the main session can issue `Agent` calls.
+
+Main session sees only structured JSON handoffs (`schemas/phase-handoff.json`), never the contents of expert reports or context packs. **Human gate is on by default** — you see the proposed panel and outstanding contradictions before any expert runs. See [docs/architecture.md](docs/architecture.md) for the full picture.
 
 ## Role catalog
 
@@ -166,7 +168,7 @@ Every role prompt opens with a hardcoded defense block. Artifact content is wrap
 
 ## Evals
 
-`evals/` contains 8 fixtures (4 real post-mortem patterns, 2 synthetic, 1 injection test, 1 good plan) with a frozen `grading.json` baseline:
+`evals/` contains 10 fixtures (4 real post-mortem patterns, 4 synthetic, 1 injection test, 1 good plan) with a frozen `grading.json` baseline:
 
 ```bash
 python evals/run_eval.py checklist

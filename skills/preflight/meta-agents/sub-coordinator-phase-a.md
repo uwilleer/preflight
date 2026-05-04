@@ -274,14 +274,14 @@ Return **only** this JSON (no prose, no markdown, no thinking block commentary):
   "last_completed_step": 6,
   "gate": null | {
     "questions_count": <1..5>,
-    "render": "<contents of gate.md, ≤4000 chars>",
+    "render": "<contents of gate.md, ≤8000 chars>",
     "render_too_long": false
   },
   "aborted": { "reason": "..." }  // only if aborted; omit otherwise
 }
 ```
 
-If `gate.md` exceeds 4000 chars, emit `render: ""` and `render_too_long: true` — the main session will Read the file itself.
+If `gate.md` exceeds 8000 chars, emit `render: ""` and `render_too_long: true` — the main session will Read the file itself.
 
 On any exception: write `$WORKSPACE/phase-a-error.json` with `{step, message, stack_trace, partial_state_paths}`, then return `{workspace_path, last_completed_step: <step before failure>, error_path: "<abs path to phase-a-error.json>"}`.
 

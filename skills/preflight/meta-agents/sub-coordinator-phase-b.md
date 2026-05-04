@@ -103,7 +103,7 @@ Do NOT propose KB candidates from ephemeral reasoning, candidate titles, or revi
 {
   "id": "<role name>",
   "subagent_type": "general-purpose",
-  "model_hint": "<haiku | sonnet | opus per per-task choice>",
+  "model_hint": "<sonnet | opus per per-task choice — never haiku for expert roles, see SKILL.md model selection policy>",
   "description": "Preflight expert: <role>",
   "prompt": "<full assembled string per the spec above>",
   "save_to": "<workspace_path>/expert_reports/<role>.json",
@@ -237,7 +237,7 @@ These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bi
 {
   "id": "synthesizer",
   "subagent_type": "general-purpose",
-  "model_hint": "<small model for aligned panels with small briefs; sonnet/opus for large or conflicted panels>",
+  "model_hint": "<sonnet for aligned panels with small briefs; opus for large or conflicted panels — never haiku, synthesis is a judgment task>",
   "description": "Synthesize preflight panel",
   "prompt": "<synthesizer.md content>\n\n## Inputs\n\n<JSON.stringify({brief, conventions, ground_truth, artifact_content: \"<<ARTIFACT-START>>\\n\" + <artifact.txt> + \"\\n<<ARTIFACT-END>>\", expert_reports: <chosen source>, user_language})>\n\nReturn ONLY the JSON object specified in the output format section. No prose.",
   "save_to": "<workspace_path>/synth_result.json",
@@ -291,7 +291,7 @@ Return:
    {
      "id": "verify-<sanitised-claim-title>-<index>",
      "subagent_type": "general-purpose",
-     "model_hint": "haiku",
+     "model_hint": "sonnet",
      "description": "Preflight verify claim: <claim.title[:40]>",
      "prompt": "<verifier.md content>\n\n## Inputs\n\n<JSON.stringify({claim, ground_truth, brief_excerpt, user_language})>\n\nReturn ONLY the JSON object specified in the output format section.",
      "save_to": "<workspace_path>/verifier_results/<id>.json",

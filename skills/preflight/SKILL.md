@@ -18,6 +18,10 @@ Before spawning Phase A, determine the user's working language from this session
 
 The boundary, enforced inside sub-coordinators: machine artefacts (`brief.md`, role-KB, JSON, expert prompts) stay in English — lower tokens, more reliable expert behaviour. User-facing prose (`gate.md`, decision cards in `synth_result`, `report.md`, polished report) is rendered in `user_language`. Technical tokens — code, `file:line` refs, command syntax, JSON keys, role names, CLI flags — stay verbatim regardless of language.
 
+## Model selection policy
+
+Sonnet floor for every task that requires judgment — coordinators, selector, every expert role, synthesizer, verifier, adversarial round, rubber-duck. Haiku is reserved for **mechanical text transforms** (currently only the KB compactor in Phase C step 11 — fixed-schema dedup + reformat with no severity calls). Opus for adversarial-reasoning roles (security, contrarian-strategist) and for the synthesizer when the panel is large or in conflict. Per-task choice lives in `request.model_hint` (set by the coordinator at dispatch construction); main passes it as `Agent`'s `model` parameter.
+
 ## Three-phase protocol
 
 ### Phase A — init, brief, gate
@@ -87,7 +91,7 @@ Agent(
 )
 ```
 
-Coordinator model: Haiku is sufficient (state inspection + dispatch construction; no heavy reasoning). Upgrade only if experiments show coordinator quality issues. Expert / synthesizer / verifier model choice is per-request via `request.model_hint`, set by the coordinator at dispatch construction time — pass it as Agent's `model` parameter when executing the dispatch.
+Coordinator model: **sonnet floor** — even though the coordinator is "just" state inspection + dispatch construction, picking the right `model_hint` per request and the right `subagent_type` per step is a judgment call that haiku gets wrong often enough to matter (verified empirically — the dispatch payloads it builds are the load-bearing input to every expert that follows). Upgrade to opus only if experiments show coordinator quality issues. Expert / synthesizer / verifier model choice is per-request via `request.model_hint`, set by the coordinator at dispatch construction time — pass it as Agent's `model` parameter when executing the dispatch.
 
 **2. Loop on `response.action`:**
 
@@ -160,7 +164,7 @@ Agent(
 )
 ```
 
-Coordinator model: Haiku is sufficient. Per-task model choice for the rubber-duck and compactor lives in `request.model_hint`.
+Coordinator model: **sonnet floor** (same reasoning as Phase B — dispatch construction is judgment). Per-task model choice for the rubber-duck and compactor lives in `request.model_hint` (rubber-duck: sonnet floor; KB compactor: haiku ok — the only mechanical-transform task in the pipeline).
 
 **2. On notification, loop on `response.action`:**
 
@@ -225,7 +229,7 @@ If `last_completed_step == 11`, the run is already complete — read `report.pol
 - `meta-agents/selector.md` — role selection logic (called by Phase A)
 - `meta-agents/synthesizer.md` — dedup + severity + conflict detection (called by Phase B)
 - `meta-agents/rubber-duck.md` — final polish (called by Phase C)
-- `meta-agents/verifier.md` — single-claim Haiku verifier (called by Phase B step 8.5)
+- `meta-agents/verifier.md` — single-claim verifier (called by Phase B step 8.5; sonnet floor — ground-truth lookups are judgment, not pattern matching)
 - `meta-agents/adversarial.md` — concede/challenge/refine prompt fragment (appended to expert prompts at Phase B step 7.5)
 - `roles/*.md` — expert prompt catalog (run `make build-index` to refresh `roles/index.json`)
 - `roles/signals/*.yaml` — signal-group checklists: `auth`, `sql`, `frontend`, `terraform`, `api` — augmenters mixed into role-KB by selector + Phase A

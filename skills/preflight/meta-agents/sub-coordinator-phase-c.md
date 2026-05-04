@@ -44,7 +44,7 @@ If `synth_result.json` or `report.md` is missing, write `phase-c-error.json` wit
 {
   "id": "rubber-duck",
   "subagent_type": "general-purpose",
-  "model_hint": "<haiku for short reports; upgrade for long where tone consistency matters>",
+  "model_hint": "<sonnet floor — rubber-duck rewrites for action-first/brevity, that's editorial taste, never haiku; upgrade to opus for long reports where tone consistency dominates>",
   "description": "Polish preflight report",
   "prompt": "<rubber-duck.md content>\n\n## Inputs\n\n<JSON.stringify({rendered_markdown: <report.md content>, artifact_path: <_index.artifact_path or marker>, artifact_content: \"<<ARTIFACT-START>>\\n<artifact.txt content>\\n<<ARTIFACT-END>>\", user_language})>\n\nReturn ONLY the rewritten markdown. No JSON wrapper, no commentary.",
   "save_to": "<workspace_path>/report.polished.md",
@@ -141,7 +141,7 @@ Build one request per role to compact:
   "id": "compact-<role>",
   "subagent_type": "general-purpose",
   "model_hint": "haiku",
-  "description": "Compact role-KB: <role>",
+  "description": "Compact role-KB: <role>  (haiku ok — sole mechanical-transform task in the pipeline: dedup + reformat by fixed schema, no severity calls)",
   "prompt": "<KB-compactor inline prompt>\n\n## Input KB\n\n<verbatim KB file content>",
   "save_to": "<workspace_path>/kb_compacted/<role>.md",
   "on_failure": "mark_skipped"
