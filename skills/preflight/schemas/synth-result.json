@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/uwilleer/preflight/schemas/synth-result.json",
+  "title": "SynthResult",
+  "description": "Strict canonical contract for the synthesizer's output (Phase B step 8). Written to $WORKSPACE/synth_result.json. Phase B step 8.5 (verifier mini-round) may augment with a verification_round block; Phase B step 9 (render) consumes it to produce report.md. NOTE: phase-handoff.json#/definitions/synth_result is a deliberately permissive mirror used by main-session runtime parsing for backward-compat with pre-port workspaces. New synthesizer dispatches and contract tests should target this strict schema.",
+  "type": "object",
+  "required": [
+    "verdict",
+    "panel",
+    "must_fix",
+    "should_fix",
+    "nice_fix",
+    "decisions",
+    "untouched_concerns",
+    "dropped",
+    "skipped_experts",
+    "correlated_bias_risk",
+    "evidence_thinness",
+    "disputed_findings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["APPROVE", "REVISE", "REJECT"]
+    },
+    "panel": {
+      "type": "array",
+      "description": "Role names of the experts whose reports were synthesized. Strings only — not objects.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "must_fix":   { "type": "array", "items": { "$ref": "#/definitions/synth_finding" } },
+    "should_fix": { "type": "array", "items": { "$ref": "#/definitions/synth_finding" } },
+    "nice_fix":   { "type": "array", "items": { "$ref": "#/definitions/synth_finding" } },
+    "decisions": {
+      "type": "array",
+      "description": "Trade-offs surfaced by the panel that the user must resolve. Each carries options + recommendation + rationale.",
+      "items": { "$ref": "#/definitions/decision" }
+    },
+    "untouched_concerns": {
+      "type": "array",
+      "description": "Topics one role flagged via out_of_scope that the owner role did not address. Single highest-value output of synth — single-reviewer baselines (plan-critic) cannot produce these.",
+      "items": {
+        "type": "object",
+        "required": ["topic", "flagged_by", "owner_role"],
+        "additionalProperties": false,
+        "properties": {
+          "topic":       { "type": "string", "minLength": 1 },
+          "flagged_by":  { "type": "string", "minLength": 1 },
+          "owner_role":  { "type": "string", "minLength": 1 },
+          "note":        { "type": "string" }
+        }
+      }
+    },
+    "dropped": {
+      "type": "array",
+      "description": "Findings filtered as noise (generic best-practice without artifact evidence). Surfaced for transparency, not action.",
+      "items": {
+        "type": "object",
+        "required": ["title", "reporter", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "title":    { "type": "string", "minLength": 1 },
+          "reporter": { "type": "string", "minLength": 1 },
+          "reason":   { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "skipped_experts": {
+      "type": "array",
+      "description": "Roles whose dispatch failed twice and were marked skipped during step 7. Empty on the happy path.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "correlated_bias_risk": {
+      "type": "boolean",
+      "description": "True when ALL of: panel size >= 3, decisions.length == 0, untouched_concerns.length == 0, must_fix + should_fix >= 2. Flags echo-chamber risk; renderer surfaces a top-of-report banner."
+    },
+    "evidence_thinness": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Fraction of surviving findings (must + should + nice, post-filter) where evidence_source == reasoning. Renderer surfaces a banner when value >= 0.5 AND total findings >= 3."
+    },
+    "disputed_findings": {
+      "type": "array",
+      "description": "Findings where the adversarial round (step 7.5) produced a challenge that did not resolve to concede or refine. Empty when adversarial was skipped or all challenges resolved.",
+      "items": { "type": "object" }
+    },
+    "artifact_content_missing": {
+      "type": "boolean",
+      "description": "Optional. True only when the input artifact_content was absent or empty and synth fell back to legacy prose-based pattern-matching for rule 5b. Coordinator may surface in a footer note."
+    },
+    "verification_round": {
+      "type": "object",
+      "description": "Added by Phase B step 8.5.resume — verifier mini-round summary. Not produced by the synthesizer itself; left optional in this schema.",
+      "additionalProperties": true,
+      "properties": {
+        "skipped":                     { "type": "boolean" },
+        "reason":                      { "type": "string" },
+        "checked":                     { "type": "integer", "minimum": 0 },
+        "verified":                    { "type": "integer", "minimum": 0 },
+        "unverified":                  { "type": "integer", "minimum": 0 },
+        "inconclusive":                { "type": "integer", "minimum": 0 },
+        "demoted_must_to_should":      { "type": "integer", "minimum": 0 },
+        "rescued_should_to_must":      { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "definitions": {
+    "synth_finding": {
+      "type": "object",
+      "description": "A finding after synthesizer dedup + cross-confirm + downgrade arithmetic. Adds reporters[] and cross_confirmed on top of the per-expert ExpertReport finding shape.",
+      "required": ["title", "evidence", "replacement", "evidence_source", "reporters", "cross_confirmed"],
+      "additionalProperties": false,
+      "properties": {
+        "title":       { "type": "string", "minLength": 1, "maxLength": 200 },
+        "evidence":    { "type": "string", "minLength": 1 },
+        "replacement": { "type": "string", "minLength": 1 },
+        "evidence_source": {
+          "type": "string",
+          "enum": ["code_cited", "doc_cited", "artifact_self", "artifact_code_claim", "reasoning"]
+        },
+        "reporters":   {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Role(s) that originally reported this finding. >1 means cross_confirmed."
+        },
+        "cross_confirmed": {
+          "type": "boolean",
+          "description": "True iff reporters.length >= 2."
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["question", "options", "tradeoff"],
+      "additionalProperties": false,
+      "properties": {
+        "question":  { "type": "string", "minLength": 1 },
+        "options":   {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["label", "consequence", "advocated_by"],
+            "additionalProperties": false,
+            "properties": {
+              "label":        { "type": "string", "minLength": 1 },
+              "consequence":  { "type": "string", "minLength": 1 },
+              "advocated_by": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            }
+          }
+        },
+        "tradeoff":           { "type": "string", "minLength": 1 },
+        "recommendation":     { "type": "string" },
+        "recommended_option": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "rationale":          { "type": "string" }
+      }
+    }
+  }
+}

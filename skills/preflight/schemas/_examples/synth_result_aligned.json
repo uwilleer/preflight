@@ -1,0 +1,73 @@
+{
+  "verdict": "REVISE",
+  "panel": ["security", "performance", "data-model"],
+  "must_fix": [
+    {
+      "title": "Plaintext password storage in users.password",
+      "evidence": "spec §3.2 stores password as VARCHAR(255) plain; auth/login.py:42 hashes nothing on insert",
+      "replacement": "store argon2id hash via passlib; migrate existing rows in a one-shot backfill behind a feature flag",
+      "evidence_source": "code_cited",
+      "reporters": ["security"],
+      "cross_confirmed": false
+    },
+    {
+      "title": "Migration takes ACCESS EXCLUSIVE on users (50M rows, ~14 min)",
+      "evidence": "spec §5.1 ALTER TABLE users ADD COLUMN shard_key INT NOT NULL DEFAULT 0; users row-count from conventions.architecture",
+      "replacement": "split into two transactions via pg_repack OR feature-flag dual-write window; either keeps writes online",
+      "evidence_source": "code_cited",
+      "reporters": ["data-model", "performance"],
+      "cross_confirmed": true
+    }
+  ],
+  "should_fix": [
+    {
+      "title": "Brute-force protection on /login depends on absent WAF",
+      "evidence": "spec §3.4 says rate-limit will live at the edge; conventions.architecture lists no WAF in the stack",
+      "replacement": "add app-level rate-limit (e.g. 5 req/min per IP via Redis counter) until WAF lands",
+      "evidence_source": "artifact_self",
+      "reporters": ["security"],
+      "cross_confirmed": false
+    }
+  ],
+  "nice_fix": [],
+  "decisions": [
+    {
+      "question": "When to run the migration: maintenance window vs blue-green dual-write?",
+      "options": [
+        {
+          "label": "30-min Sunday maintenance window",
+          "consequence": "503 for 30 min; simple rollback; well within SLA 99.5% (3.6 h/month)",
+          "advocated_by": ["data-model", "performance"]
+        },
+        {
+          "label": "Blue-green dual-write for 2 weeks",
+          "consequence": "no downtime; +$1.8k infra; split-brain risk on rollback if either side diverges",
+          "advocated_by": ["security"]
+        }
+      ],
+      "tradeoff": "Operational complexity + cost vs UX and rollback risk.",
+      "recommendation": "30-min Sunday maintenance window",
+      "recommended_option": 0,
+      "rationale": "Brief explicitly names cost-conscious as a success criterion; 30-min downtime fits stated SLA."
+    }
+  ],
+  "untouched_concerns": [
+    {
+      "topic": "Rollback strategy on partial-shard failure",
+      "flagged_by": "data-model",
+      "owner_role": "ops-reliability",
+      "note": "data-model flagged as ops-reliability's concern; ops-reliability not on this panel"
+    }
+  ],
+  "dropped": [
+    {
+      "title": "Add structured logging",
+      "reporter": "performance",
+      "reason": "generic, no artifact evidence"
+    }
+  ],
+  "skipped_experts": [],
+  "correlated_bias_risk": false,
+  "evidence_thinness": 0.0,
+  "disputed_findings": []
+}

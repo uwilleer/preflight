@@ -117,6 +117,7 @@ role-level `model` (see `meta-agents/selector.md`).
 | Change verifier rules | `meta-agents/verifier.md`, `schemas/verifier-result.json` |
 | Change adversarial-round prompt | `meta-agents/adversarial.md` |
 | Change rubber-duck polishing rules | `meta-agents/rubber-duck.md` |
+| Change KB compaction rules (dedup / stale-drop) | `meta-agents/kb-compactor.md` |
 | Change main-session orchestration | `SKILL.md` |
 | Add an eval fixture | `evals/fixtures/<slug>/plan.md`, then update `evals/grading.json` |
 

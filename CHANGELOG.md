@@ -2,7 +2,24 @@
 
 ## [Unreleased]
 
-Documentation actualization after v0.7.x and a project-wide model selection policy. No schema or wire-shape changes; safe to pull without migration.
+Two follow-up items after the v0.7.x docs/policy actualization: extract the KB-compactor into its own meta-agent file (issue #12), and add a strict standalone schema for synthesizer output plus fixtures and validation (issue #10, scope-down).
+
+### Added
+- **`meta-agents/kb-compactor.md`** — KB-compactor extracted from its inline location in `sub-coordinator-phase-c.md`. Standard meta-agent layout: inputs, operations, output format, anti-patterns. Closes issue #12. Pure refactor — no behavioural change; coordinator now references the new file the same way it references all other meta-agents.
+- **`schemas/synth-result.json`** — strict canonical contract for the synthesizer's output (Phase B step 8). Companion to `phase-handoff.json#/definitions/synth_result` (which stays as a deliberately permissive mirror for runtime backward-compat with pre-port workspaces). The strict schema requires `correlated_bias_risk`, `evidence_thinness`, `disputed_findings` and validates per-finding `reporters[]` + `cross_confirmed`. Used by new dispatches (`sub-coordinator-phase-b.md` step 8 `schema_ref`) and by contract tests.
+- **2 new positive fixtures** under `schemas/_examples/`: `synth_result_aligned.json` (clean panel, low evidence_thinness, decision card present) and `synth_result_bias_flagged.json` (panel agreed without tension, high evidence_thinness, `correlated_bias_risk: true`). 5 new negative cases in `scripts/validate-handoff-examples.py` covering missing required fields, out-of-range `evidence_thinness`, bad `verdict` enum, panel entry shape, and `synth_finding` missing `reporters`.
+
+### Changed
+- **`meta-agents/sub-coordinator-phase-c.md`** step 11 — replaced the inline KB-compactor prompt block (lines 121-145) with a one-line reference to `meta-agents/kb-compactor.md`. Dispatch payload's `prompt` field now reads `<full content of meta-agents/kb-compactor.md>`, matching the pattern used by every other meta-agent dispatch.
+- **`meta-agents/sub-coordinator-phase-b.md`** step 8 — synthesizer dispatch's `schema_ref` switched from `schemas/phase-handoff.json#/definitions/synth_result` to `schemas/synth-result.json` (the new strict schema). Existing dispatched synthesizer agents will see the stricter contract on first run after this lands.
+- **`SKILL.md`** References list — added `meta-agents/kb-compactor.md`, `schemas/synth-result.json`, and `schemas/verifier-result.json` (the verifier file existed since v0.7.1 but wasn't listed).
+- **`docs/architecture.md`** "Where to find what" table — added a row for KB compaction rules pointing at the new `kb-compactor.md`.
+
+### Closes
+- Issue #12 — KB-compactor inline prompt inconsistency.
+- Issue #10 (scope-down) — synth_result schema + contract tests added. Cross-reference grep and spawn-shape lint deferred as gold-plating for a one-person project; will reopen if drift starts biting.
+
+## [0.7.1] — 2026-05-03
 
 ### Added
 - **`docs/architecture.md`** — single-page entry point for new contributors. Three-actor table (main session vs sub-coordinators vs experts), v0.7.0 dispatch-loop diagram, workspace layout reference, model selection policy, contributor map ("you want to X → look at Y"), short design rationale. Closes issue #11.
