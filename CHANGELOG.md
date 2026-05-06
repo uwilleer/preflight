@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-Two follow-up items after the v0.7.x docs/policy actualization: extract the KB-compactor into its own meta-agent file (issue #12), and add a strict standalone schema for synthesizer output plus fixtures and validation (issue #10, scope-down).
+Two follow-up items after the v0.7.x docs/policy actualization: extract the KB-compactor into its own meta-agent file (issue #12), and add a strict standalone schema for synthesizer output plus fixtures and validation (issue #10, scope-down). Plus a discovery-only tweak shifting `SKILL.md`'s `description` from opt-in to default-gate framing — preflight is now invoked pre-emptively before any non-trivial implementation rather than only on explicit panel-review requests.
 
 ### Added
 - **`meta-agents/kb-compactor.md`** — KB-compactor extracted from its inline location in `sub-coordinator-phase-c.md`. Standard meta-agent layout: inputs, operations, output format, anti-patterns. Closes issue #12. Pure refactor — no behavioural change; coordinator now references the new file the same way it references all other meta-agents.
@@ -13,6 +13,7 @@ Two follow-up items after the v0.7.x docs/policy actualization: extract the KB-c
 - **`meta-agents/sub-coordinator-phase-c.md`** step 11 — replaced the inline KB-compactor prompt block (lines 121-145) with a one-line reference to `meta-agents/kb-compactor.md`. Dispatch payload's `prompt` field now reads `<full content of meta-agents/kb-compactor.md>`, matching the pattern used by every other meta-agent dispatch.
 - **`meta-agents/sub-coordinator-phase-b.md`** step 8 — synthesizer dispatch's `schema_ref` switched from `schemas/phase-handoff.json#/definitions/synth_result` to `schemas/synth-result.json` (the new strict schema). Existing dispatched synthesizer agents will see the stricter contract on first run after this lands.
 - **`SKILL.md`** References list — added `meta-agents/kb-compactor.md`, `schemas/synth-result.json`, and `schemas/verifier-result.json` (the verifier file existed since v0.7.1 but wasn't listed).
+- **`SKILL.md`** `description` framing — shifted from opt-in (`"Use when the user wants..."`) to default-gate (`"Default gate before any non-trivial implementation, refactor, or architecture change — invoke pre-emptively"`). Tightened SKIP-list to clearly atomic isolated work (typos, single-line fixes with stack trace + file:line, lint runs, README-only edits, dependency bumps without API change). Declared ordering: invoke after `dispatcher`'s deep-path verdict; run BEFORE `decomposing-large-tasks` and `brainstorming`. Multi-agent panel analysis reframed as an investment that prevents rework rather than overhead to minimize. Discovery-only — no pipeline, schema, or contract impact; affects only how often the skill is auto-invoked.
 - **`docs/architecture.md`** "Where to find what" table — added a row for KB compaction rules pointing at the new `kb-compactor.md`.
 
 ### Closes
