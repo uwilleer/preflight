@@ -16,6 +16,37 @@ Main session appends a JSON block with:
 
 Read `$WORKSPACE/_index.json` first — it carries `is_git`, `git_sha`, `target_type`, `scope`, `last_completed_step`, optionally `dispatch[]` (status of the previous round-trip's per-request outcomes if main wrote them back). Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
 
+## Timing instrumentation
+
+Track each coordinator spawn in `_index.json.coordinator_spawns[]` and each main-executed Agent call in `_index.json.dispatch[]`. Both fields are **optional and additive** — runs before this instrumentation lacked them; readers must treat absence as `[]`. Same contract as Phase A; no handoff-schema change.
+
+**On every spawn (initial OR resume) — append a spawn entry.** Read `_index.json`, initialize `coordinator_spawns` to `[]` if absent, then append BEFORE doing any pre-flight workspace inspection:
+
+```json
+{
+  "phase": "B",
+  "spawn_n": <count of existing entries with phase=="B" + 1>,
+  "resume_token": <input.resume_token verbatim — null on first spawn, "post-7" / "post-7.5" / "post-8" / "post-8.5" on resumes>,
+  "started_at": "<ISO-8601 UTC at entry>",
+  "emit_at": null,
+  "action": null,
+  "step_emitted": null
+}
+```
+
+Write `_index.json`. This is the new spawn's "open" record; everything downstream observes it.
+
+**Before EVERY return (every `action: "dispatch" | "complete" | "error"` emit, including the per-step emits in step 7, 7.5, 8, 8.5, and the step-9 final) — close the spawn entry.** Find your entry by `phase + spawn_n` and set:
+- `emit_at` — ISO-8601 UTC at the moment of emit
+- `action` — exactly the `action` you are about to return
+- `step_emitted` — `dispatch.step` ("7" / "7.5" / "8" / "8.5") when `action == "dispatch"`; otherwise `null`
+
+Write `_index.json`, then return the handoff JSON. The bookkeeping is one read-modify-write per coordinator entry and one per emit; cost is negligible vs the dispatch latency it measures.
+
+**Dispatch timing is main's responsibility** — main writes `started_at` / `completed_at` / `duration_ms` / `status` / `attempt` per request to `_index.json.dispatch[]`. You do NOT write timing fields for the requests you dispatch; you only consume them on resume if you need to (for now you don't — failure status from main is what gates retries). The expanded `dispatch[]` shape is documented in the SKILL.md "Executing a dispatch" section.
+
+**On exception path** — if you crash before reaching the emit hook, the spawn entry stays open (`emit_at: null, action: null`). That's a useful signal in postmortem. Still write `phase-b-error.json` per the existing exception contract; the open spawn entry coexists with `error_path`.
+
 ## Pre-flight: workspace state check
 
 This sub-coordinator no longer calls `Agent` itself. The legacy `ToolSearch select:Agent` probe from v0.6.x is removed — it served no purpose under v0.7.0.
@@ -477,6 +508,8 @@ Filtered as noise: <dropped items with reason>
 Write rendered markdown to `$WORKSPACE/report.md`. Update `_index.json.last_completed_step = 9`. Then return `action: "complete"`.
 
 ## Output — emit one of three JSON shapes and stop
+
+**Close the spawn entry first** — see "Timing instrumentation" above: set `emit_at`, `action`, `step_emitted` on the matching entry in `_index.json.coordinator_spawns[]` (the one you appended on entry of THIS spawn), write `_index.json`. Then emit the handoff JSON below. This rule applies to every emit path — step 7 dispatch, step 7.5 dispatch, step 8 dispatch, step 8.5 dispatch, step-9 complete, and any error path.
 
 Match `schemas/phase-handoff.json#/definitions/phase_b_output`. See `schemas/_examples/phase_b_*.json` for canonical shapes.
 

@@ -18,6 +18,35 @@ The main session appends a JSON block with:
 
 If `resume_from` is set, read `_index.json.last_completed_step` and skip completed steps. If `gate_answers` is set, this is a re-iteration: re-read the workspace, patch `brief.md` / `ground_truth.json` per answers, regenerate `gate.md`, and return the new gate.
 
+## Timing instrumentation
+
+Track each coordinator spawn in `_index.json.coordinator_spawns[]` so latency is measurable without re-running the pipeline. The field is **optional and additive** — runs before this instrumentation lacked it; readers must treat absence as `[]`. No handoff schema changes; this is internal workspace state.
+
+**On entry — append a spawn entry.** Right after step 0 writes `_index.json` (or immediately on resume, before any other step), read `_index.json`, initialize `coordinator_spawns` to `[]` if absent, then append:
+
+```json
+{
+  "phase": "A",
+  "spawn_n": <count of existing entries with phase=="A" + 1>,
+  "resume_token": null,
+  "started_at": "<ISO-8601 UTC at entry — e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`>",
+  "emit_at": null,
+  "action": null,
+  "step_emitted": null
+}
+```
+
+Write `_index.json`.
+
+**Before emitting the final JSON handoff — close the spawn entry.** Find your spawn entry by `phase + spawn_n` and set:
+- `emit_at` — ISO-8601 UTC at emit
+- `action` — `"complete"` (gate emitted or auto-proceed), `"aborted"` (aborted block returned), or `"error"` (exception path; also sets `error_path` in the handoff)
+- `step_emitted` — always `null` for Phase A (no dispatch handoff)
+
+Write `_index.json` once more, then return the handoff JSON.
+
+**On exception path** — if you crash before reaching the emit hook, the spawn entry stays open (`emit_at: null, action: null`). That's a useful signal in postmortem: `coordinator_spawns[]` entries with `emit_at == null` indicate crashed spawns. Still write `phase-a-error.json` per the existing exception contract.
+
 ## Steps
 
 ### 0. Workspace init + scope
@@ -59,6 +88,8 @@ Determine `$IS_GIT` = `true` if `git -C "$SCOPE" rev-parse --show-toplevel` succ
 ```
 
 Update `last_completed_step` at the end of each completed step.
+
+**Append the spawn entry to `coordinator_spawns[]` now** (see "Timing instrumentation" above). This is the earliest point where `_index.json` exists.
 
 ### 1. Ingest
 
@@ -265,6 +296,8 @@ No headings beyond the `##` title. No verbatim dumps of brief or ground_truth.
 Update `_index.json.last_completed_step = 6`.
 
 ## Output — emit this JSON and stop
+
+**Close the spawn entry first** — see "Timing instrumentation" above: set `emit_at`, `action`, `step_emitted` on the matching entry in `_index.json.coordinator_spawns[]`, write `_index.json`. Then emit the handoff JSON below.
 
 Return **only** this JSON (no prose, no markdown, no thinking block commentary):
 

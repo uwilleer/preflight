@@ -15,6 +15,37 @@ Main session appends a JSON block with:
 
 Read `$WORKSPACE/_index.json` first. Then `$WORKSPACE/synth_result.json`, `$WORKSPACE/expert_reports/*.json`, `$WORKSPACE/report.md`, `$WORKSPACE/artifact.txt`.
 
+## Timing instrumentation
+
+Same contract as Phase B — track each coordinator spawn in `_index.json.coordinator_spawns[]` and each main-executed Agent call in `_index.json.dispatch[]`. Both fields are **optional and additive** — runs before this instrumentation lacked them; readers must treat absence as `[]`. No handoff-schema change.
+
+**On every spawn (initial OR resume) — append a spawn entry** before any pre-flight workspace inspection:
+
+```json
+{
+  "phase": "C",
+  "spawn_n": <count of existing entries with phase=="C" + 1>,
+  "resume_token": <input.resume_token verbatim — null on first spawn, "post-10" / "post-11-compact" on resumes>,
+  "started_at": "<ISO-8601 UTC at entry>",
+  "emit_at": null,
+  "action": null,
+  "step_emitted": null
+}
+```
+
+Write `_index.json`.
+
+**Before EVERY return — close the spawn entry.** Find your entry by `phase + spawn_n` and set:
+- `emit_at` — ISO-8601 UTC at emit
+- `action` — exactly the `action` you are about to return
+- `step_emitted` — `dispatch.step` ("10" / "11") when `action == "dispatch"`; otherwise `null`
+
+Write `_index.json`, then return the handoff JSON.
+
+**Dispatch timing is main's responsibility** — see SKILL.md "Executing a dispatch" section. You do not write timing fields for requests you dispatch; you read them on resume only if needed.
+
+**On exception path** — if you crash before reaching the emit hook, the spawn entry stays open (`emit_at: null, action: null`). Useful for postmortem. Phase C errors are non-blocking per the existing contract.
+
 ## Pre-flight: workspace state check
 
 The legacy `ToolSearch select:Agent` probe from v0.6.x is removed — coordinator never calls `Agent` under v0.7.0.
@@ -164,6 +195,8 @@ Return:
 3. **Return `action: "complete"`** with the final `kb_summary`.
 
 ## Output — emit one of three JSON shapes and stop
+
+**Close the spawn entry first** — see "Timing instrumentation" above: set `emit_at`, `action`, `step_emitted` on the matching entry in `_index.json.coordinator_spawns[]`, write `_index.json`. Then emit the handoff JSON below. Applies to every emit — step 10 dispatch, step 11 dispatch, complete, and any error path.
 
 Match `schemas/phase-handoff.json#/definitions/phase_c_output`. See `schemas/_examples/phase_c_*.json` for canonical shapes.
 

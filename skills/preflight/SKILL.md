@@ -22,6 +22,35 @@ The boundary, enforced inside sub-coordinators: machine artefacts (`brief.md`, r
 
 Sonnet floor for every task that requires judgment — coordinators, selector, every expert role, synthesizer, verifier, adversarial round, rubber-duck. Haiku is reserved for **mechanical text transforms** (currently only the KB compactor in Phase C step 11 — fixed-schema dedup + reformat with no severity calls). Opus for adversarial-reasoning roles (security, contrarian-strategist) and for the synthesizer when the panel is large or in conflict. Per-task choice lives in `request.model_hint` (set by the coordinator at dispatch construction); main passes it as `Agent`'s `model` parameter.
 
+## Timing instrumentation
+
+Each coordinator spawn and each main-executed `Agent` dispatch is recorded in `$WORKSPACE/_index.json` so latency is measurable without re-running the pipeline. Both `_index.json.coordinator_spawns[]` and `_index.json.dispatch[]` are **optional and additive** — older runs lacked them; readers must treat absence as `[]`. No handoff-schema change.
+
+**Sub-coordinators write `coordinator_spawns[]`.** Each Phase A/B/C subagent appends an entry on entry and closes it on emit (start/end timestamps + which `action` it returned). See the "Timing instrumentation" section in each `meta-agents/sub-coordinator-phase-{a,b,c}.md` for the per-phase contract.
+
+**Main writes `dispatch[]`.** For every `Agent` call you execute as part of a dispatch handoff, record one entry in `_index.json.dispatch[]`. Append before the call, mutate on completion. Shape:
+
+```json
+{
+  "id": "<request.id verbatim>",
+  "subagent_type": "<request.subagent_type>",
+  "model": "<request.model_hint or actual model used>",
+  "step": "<request's dispatch step — \"7\", \"7.5\", \"8\", \"8.5\", \"10\", \"11\">",
+  "started_at": "<ISO-8601 UTC immediately before the Agent call>",
+  "completed_at": "<ISO-8601 UTC immediately after Agent returned, or after marking skipped>",
+  "duration_ms": <integer milliseconds = completed_at - started_at>,
+  "status": "ok" | "skipped" | "error",
+  "reason": "<short error/skip summary, only when status != ok>",
+  "attempt": <1-based; retries append a NEW entry, do not overwrite the prior attempt>
+}
+```
+
+For parallel dispatches (single message with N `Agent` calls), record `started_at` for each request just before issuing the batch, then `completed_at` per request as each result lands. For sequential dispatches, record per-call as you go. Retries (transient failures with the cap-at-2 retry per the coordinator's contract) append a new entry with `attempt: 2` rather than overwriting `attempt: 1` — the per-attempt history is the load-bearing telemetry.
+
+The expanded `dispatch[]` shape is **a superset** of the prior `{role, model, step}` shape that step-7 instructions already wrote — old runs and old code paths that consume the lighter shape still work; new fields are additive.
+
+**Why optional:** runs older than this instrumentation must remain readable. Future tooling (e.g. `evals/timing_report.py`) parses both arrays if present, computes per-phase latency = `max(emit_at) - min(started_at)` and per-step dispatch latency = `max(completed_at where step == X) - min(started_at where step == X)`. Without this telemetry, optimization ideas are guesses.
+
 ## Three-phase protocol
 
 ### Phase A — init, brief, gate
@@ -112,11 +141,12 @@ Parse the return against `schemas/phase-handoff.json#/definitions/phase_b_output
 Read `response.dispatch.requests[]`. If `parallelism == "parallel"`, send a **single message** containing N `Agent` tool calls — one per request (parallel execution). If `parallelism == "sequential"`, send them one at a time.
 
 For each request:
+- **Append a `dispatch[]` entry** (see "Timing instrumentation" above) with `started_at` set to the ISO-8601 UTC moment immediately before the call, and `status: "ok"` provisionally. Carry `id`, `subagent_type`, `model`, `step` from the request; `attempt: 1` (or `attempt: <prior + 1>` on a retry — append, do not overwrite).
 - Spawn `Agent(subagent_type=request.subagent_type, model=request.model_hint, description=request.description, prompt=request.prompt)`.
-- On success: Write the response body to `request.save_to` verbatim.
+- On success: Write the response body to `request.save_to` verbatim. **Update the `dispatch[]` entry** with `completed_at` and `duration_ms`.
 - On failure (timeout, malformed JSON the agent itself rejected, exception):
-  - If `request.on_failure == "mark_skipped"`: write to `_index.json.dispatch[<request.id>] = {status: "skipped", reason: "<error summary>"}` and continue.
-  - If `request.on_failure == "abort"`: stop the loop, surface error to the user, do NOT spawn Phase C.
+  - If `request.on_failure == "mark_skipped"`: **update the dispatch[] entry** with `status: "skipped"`, `reason: "<error summary>"`, `completed_at`, `duration_ms`, and continue.
+  - If `request.on_failure == "abort"`: **update the dispatch[] entry** with `status: "error"`, `reason`, `completed_at`, `duration_ms`. Then stop the loop, surface error to the user, do NOT spawn Phase C.
 
 Do NOT modify `request.prompt` — coordinator built it deliberately. Main is a dumb executor.
 
