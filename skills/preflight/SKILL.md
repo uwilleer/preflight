@@ -12,6 +12,18 @@ Under v0.7.0 (post-#19), Phase B and Phase C use a **dispatch loop**: the coordi
 
 This split exists for one reason: running the full pipeline inline would burn 80–150k of main-session context per invocation (workspace files, expert reports, synthesizer JSON, render scratch). Sub-coordinator dispatch keeps your context at ~50k under v0.7.0 (was ~25k under v0.6.x — the round-trip pattern adds some overhead, but is still well under the inline cost). The coordinators do the thinking; you do the `Agent` execution and route handoffs.
 
+## Cost profile detection
+
+Before spawning Phase A, extract `cost_profile` from the `/preflight` invocation:
+
+- If the first non-whitespace token of the argument (after stripping the `/preflight` command itself) is the literal word `fast` (case-insensitive), set `cost_profile = "fast"` and treat the remainder of the argument as the actual artifact path/text.
+- Otherwise `cost_profile = "thorough"`.
+
+Examples:
+- `/preflight fast path/to/spec.md` → `cost_profile = "fast"`, `user_request = "path/to/spec.md"`
+- `/preflight path/to/spec.md` → `cost_profile = "thorough"`, `user_request = "path/to/spec.md"`
+- `/preflight fast` (no artifact) → `cost_profile = "fast"`, `user_request = ""` (Phase A will error on empty request — surface to user)
+
 ## Output language
 
 Before spawning Phase A, determine the user's working language from this session: the system prompt's language directive (e.g. "Always respond in Русский"), recent user turns, and the natural-language sections of the artifact or `/preflight` argument. Encode it as a short free-form string (`"Russian"`, `"English"`, `"German"`, …). Default to `"English"` if the signal is absent or mixed. Pass this string as `user_language` in the JSON input to every phase.
@@ -65,9 +77,10 @@ Agent(
          + "\n\n## Invocation inputs\n\n"
          + JSON.stringify({
              cwd: <current working directory>,
-             user_request: <verbatim /preflight argument or pasted text>,
+             user_request: <verbatim artifact path/text, with "fast" keyword stripped>,
              now_iso: <ISO-8601 timestamp at invocation>,
              user_language: <detected user language string, e.g. "Russian" or "English">,
+             cost_profile: <"fast" or "thorough" per detection above>,
              resume_from: null,
              gate_answers: null
            })
@@ -151,6 +164,7 @@ Agent(
              workspace_path: <from Phase A>,
              gate_answers_path: <"<workspace>/gate_answers.json"> | null,
              user_language: <same string passed to Phase A>,
+             cost_profile: <same cost_profile detected at invocation>,
              resume_token: null
            })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
@@ -199,6 +213,7 @@ Agent(
              workspace_path: <same>,
              gate_answers_path: <same>,
              user_language: <same>,
+             cost_profile: <same cost_profile detected at invocation>,
              resume_token: response.dispatch.resume_token
            })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
