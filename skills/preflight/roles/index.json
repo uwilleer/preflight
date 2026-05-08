@@ -162,6 +162,27 @@
     ]
   },
   {
+    "name": "migration-safety",
+    "when_to_pick": "Artifact introduces or changes a database schema migration, data backfill, dual-write window, or any rollout that mutates persistent state in production.",
+    "tags": [
+      "migration",
+      "schema",
+      "ddl",
+      "backfill",
+      "expand-contract",
+      "rollout",
+      "lock",
+      "dual-write",
+      "rollback"
+    ],
+    "skip_when": "Pure read-only change. Local-dev fixture data only. Documentation that does not describe a migration.",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "data_flows"
+    ]
+  },
+  {
     "name": "observability",
     "when_to_pick": "Artifact describes a new service, background job, data pipeline, or feature with non-trivial state changes where logging and monitoring are not addressed.",
     "tags": [
