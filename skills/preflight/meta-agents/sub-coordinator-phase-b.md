@@ -12,6 +12,7 @@ Main session appends a JSON block with:
 - `workspace_path` — absolute path to `$WORKSPACE` from Phase A.
 - `gate_answers_path` — absolute path to `gate_answers.json` if gate ran; null if Phase A auto-proceeded.
 - `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Forwarded to the synthesizer (which renders user-facing strings in it) and used by the step-9 renderer to translate section heading template literals. Expert prompts stay English regardless.
+- `cost_profile` — `"fast"` or `"thorough"` (optional, default `"thorough"`). Read once at entry; also available in `_index.json.cost_profile` as the resumability anchor (the two must match — if they differ, trust the invocation input and warn in a comment).
 - `resume_token` — `null` on first spawn; opaque string on re-spawns within a single Phase B run (e.g. `"post-7"`, `"post-7.5"`, `"post-8"`, `"post-8.5"`). Treat as a hint, not as truth.
 
 Read `$WORKSPACE/_index.json` first — it carries `is_git`, `git_sha`, `target_type`, `scope`, `last_completed_step`, optionally `dispatch[]` (status of the previous round-trip's per-request outcomes if main wrote them back). Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
@@ -182,7 +183,8 @@ Do NOT update `_index.json.last_completed_step = 7` here — that happens in 7.r
 **Skip condition:** skip the adversarial round if ANY of:
 - Total panel size < 3 (binary panels can legitimately agree without flagging groupthink — same threshold the synthesizer uses for `correlated_bias_risk`)
 - Sum of `must_fix.length + should_fix.length` across ALL expert reports < 2 (nothing substantive to challenge — same threshold the synthesizer uses for `correlated_bias_risk`)
-- `_index.json` contains `"preflight_no_adversarial": true` (escape hatch for cost-sensitive runs)
+- `_index.json` contains `"preflight_no_adversarial": true` (legacy escape hatch for cost-sensitive runs)
+- `cost_profile == "fast"` (fast mode always skips adversarial)
 
 These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bias_risk` rule (panel ≥ 3, must+should ≥ 2). The previous panel-< 4 cutoff produced runs where the synthesizer surfaced the "all experts agreed without cross-role tension" warning banner but the adversarial round that would have either confirmed (concede) or surfaced disagreement (challenge) had been skipped.
 
@@ -268,7 +270,7 @@ These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bi
 {
   "id": "synthesizer",
   "subagent_type": "general-purpose",
-  "model_hint": "<sonnet for aligned panels with small briefs; opus for large or conflicted panels — never haiku, synthesis is a judgment task>",
+  "model_hint": "<choose per rule: if cost_profile == 'fast' → 'sonnet'; else if panel_size ≥ 4 AND adversarial_round.skipped == false AND adversarial_round.challenge_count ≥ 1 → 'opus'; else → 'sonnet'. Never haiku — synthesis is a judgment task.>",
   "description": "Synthesize preflight panel",
   "prompt": "<synthesizer.md content>\n\n## Inputs\n\n<JSON.stringify({brief, conventions, ground_truth, artifact_content: \"<<ARTIFACT-START>>\\n\" + <artifact.txt> + \"\\n<<ARTIFACT-END>>\", expert_reports: <chosen source>, user_language})>\n\nReturn ONLY the JSON object specified in the output format section. No prose.",
   "save_to": "<workspace_path>/synth_result.json",
@@ -308,7 +310,9 @@ Return:
 
 ### 8.5.emit (skip-or-dispatch)
 
-**Skip condition:** if ALL `must_fix` items in `synth_result.must_fix` have `evidence_source == "code_cited"`, skip entirely. Write `$WORKSPACE/verification_round.json` as `{"skipped": true, "reason": "all must_fix have code_cited", "checked": 0, "verified": 0, "unverified": 0, "inconclusive": 0, "demoted_must_to_should": 0}` and proceed inline to step 9 (render).
+**Skip condition:** skip the verification mini-round if ANY of:
+- `cost_profile == "fast"` — write `$WORKSPACE/verification_round.json` as `{"skipped": true, "reason": "fast mode", "checked": 0, "verified": 0, "unverified": 0, "inconclusive": 0, "demoted_must_to_should": 0}` and proceed to step 9 inline.
+- ALL `must_fix` items in `synth_result.must_fix` have `evidence_source == "code_cited"` — write `$WORKSPACE/verification_round.json` as `{"skipped": true, "reason": "all must_fix have code_cited", "checked": 0, "verified": 0, "unverified": 0, "inconclusive": 0, "demoted_must_to_should": 0}` and proceed to step 9 inline.
 
 **Otherwise:**
 
