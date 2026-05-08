@@ -12,7 +12,7 @@ Main session appends a JSON block with:
 - `workspace_path` — absolute path to `$WORKSPACE` from Phase A.
 - `gate_answers_path` — absolute path to `gate_answers.json` if gate ran; null if Phase A auto-proceeded.
 - `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Forwarded to the synthesizer (which renders user-facing strings in it) and used by the step-9 renderer to translate section heading template literals. Expert prompts stay English regardless.
-- `cost_profile` — `"fast"` or `"thorough"` (optional, default `"thorough"`). Read once at entry; also available in `_index.json.cost_profile` as the resumability anchor (the two must match — if they differ, trust the invocation input and warn in a comment).
+- `cost_profile` — `"fast"` or `"thorough"` (optional, default `"thorough"`). Read once at entry; also written to `_index.json.cost_profile` by Phase A for observability.
 - `resume_token` — `null` on first spawn; opaque string on re-spawns within a single Phase B run (e.g. `"post-7"`, `"post-7.5"`, `"post-8"`, `"post-8.5"`). Treat as a hint, not as truth.
 
 Read `$WORKSPACE/_index.json` first — it carries `is_git`, `git_sha`, `target_type`, `scope`, `last_completed_step`, optionally `dispatch[]` (status of the previous round-trip's per-request outcomes if main wrote them back). Read `$WORKSPACE/brief.md`, `$WORKSPACE/ground_truth.json` (if exists), `$WORKSPACE/context_pack.json` (if exists), `$WORKSPACE/roster.json`, `$WORKSPACE/role_kb/*.md`.
@@ -270,7 +270,7 @@ These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bi
 {
   "id": "synthesizer",
   "subagent_type": "general-purpose",
-  "model_hint": "<choose per rule: if cost_profile == 'fast' → 'sonnet'; else if panel_size ≥ 4 AND adversarial_round.skipped == false AND adversarial_round.challenge_count ≥ 1 → 'opus'; else → 'sonnet'. Never haiku — synthesis is a judgment task.>",
+  "model_hint": "<choose per rule: if cost_profile == 'fast' → 'sonnet'; else if panel_size ≥ 4 AND adversarial_round.skipped == false → 'opus'; else → 'sonnet'. Never haiku — synthesis is a judgment task.>",
   "description": "Synthesize preflight panel",
   "prompt": "<synthesizer.md content>\n\n## Inputs\n\n<JSON.stringify({brief, conventions, ground_truth, artifact_content: \"<<ARTIFACT-START>>\\n\" + <artifact.txt> + \"\\n<<ARTIFACT-END>>\", expert_reports: <chosen source>, user_language})>\n\nReturn ONLY the JSON object specified in the output format section. No prose.",
   "save_to": "<workspace_path>/synth_result.json",

@@ -35,7 +35,7 @@
         },
         "cost_profile": {
           "type": "string",
-          "enum": ["fast", "thorough"],
+          "enum": ["fast"],
           "description": "Cost/quality tradeoff profile. 'fast' skips adversarial (7.5), verifier (8.5), forces sonnet for synthesizer. Default 'thorough' when absent."
         }
       }
@@ -127,7 +127,7 @@
         },
         "cost_profile": {
           "type": "string",
-          "enum": ["fast", "thorough"],
+          "enum": ["fast"],
           "description": "Cost/quality tradeoff profile. Passed by main on every Phase B spawn. Default 'thorough' when absent."
         }
       }
