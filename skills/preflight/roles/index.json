@@ -121,6 +121,25 @@
     "synced_at": "2026-04-21"
   },
   {
+    "name": "docs-coherence",
+    "when_to_pick": "Artifact changes public-surface code (APIs, CLI flags, config keys, exported types, environment variables) without an accompanying doc update, or modifies docs in a way that may have diverged from code.",
+    "tags": [
+      "docs",
+      "drift",
+      "readme",
+      "changelog",
+      "docstring",
+      "deprecation",
+      "claude-md"
+    ],
+    "skip_when": "Pure internal refactor with no public-surface change. Test-only change. Style-only formatting change.",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "api_surface"
+    ]
+  },
+  {
     "name": "error-handling",
     "when_to_pick": "Artifact describes operations that can fail — external calls, IO, DB queries, async jobs, user input processing — and doesn't specify how errors are handled.",
     "tags": [
