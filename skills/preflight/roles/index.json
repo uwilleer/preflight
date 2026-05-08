@@ -141,6 +141,27 @@
     "synced_at": "2026-04-21"
   },
   {
+    "name": "i18n",
+    "when_to_pick": "Artifact introduces or changes user-facing text, locale-dependent formatting, parsing of user input that varies by locale, or any string destined for end-user display.",
+    "tags": [
+      "i18n",
+      "l10n",
+      "localization",
+      "locale",
+      "cldr",
+      "intl",
+      "encoding",
+      "timezone",
+      "rtl"
+    ],
+    "skip_when": "Pure backend internals with no user-facing output. Log messages and developer-facing errors are out of scope unless the project specifies otherwise.",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "api_surface"
+    ]
+  },
+  {
     "name": "observability",
     "when_to_pick": "Artifact describes a new service, background job, data pipeline, or feature with non-trivial state changes where logging and monitoring are not addressed.",
     "tags": [
