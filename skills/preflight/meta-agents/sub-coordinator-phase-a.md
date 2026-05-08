@@ -15,6 +15,7 @@ The main session appends a JSON block with:
 - `user_language` — free-form name of the user's working language (`"Russian"`, `"English"`, …). Default `"English"` if absent. Used at step 6 only — every other artefact (`brief.md`, `ground_truth.json`, `context_pack.json`, `roster.json`, role-KB) is English regardless.
 - `resume_from` — workspace path if resuming; else null
 - `gate_answers` — only set on re-iteration when the user's previous gate answer changed load-bearing facts
+- `cost_profile` — `"fast"` or `"thorough"` (optional, default `"thorough"`). Controls Phase B policies: fast skips adversarial and verifier, forces sonnet for synthesizer.
 
 If `resume_from` is set, read `_index.json.last_completed_step` and skip completed steps. If `gate_answers` is set, this is a re-iteration: re-read the workspace, patch `brief.md` / `ground_truth.json` per answers, regenerate `gate.md`, and return the new gate.
 
@@ -83,7 +84,8 @@ Determine `$IS_GIT` = `true` if `git -C "$SCOPE" rev-parse --show-toplevel` succ
   "started_at": "<now_iso>",
   "run_number": <N>,
   "last_completed_step": 0,
-  "target_type": null
+  "target_type": null,
+  "cost_profile": "<cost_profile from invocation inputs, default 'thorough'>"
 }
 ```
 
