@@ -27,4 +27,4 @@ checklist:
 
 ## Adding new signal groups
 
-Create a new `roles/signals/<group>.yaml` following the schema above. Run `make build-index` to refresh `roles/index.json` with the new signal group entry (or add manually if make is unavailable).
+Create a new `roles/signals/<group>.yaml` following the schema above. The selector loads `signals/*.yaml` directly at runtime — there is no index regeneration step. Run `make test-signals` (or `make test`) to validate schema, regex matchers, and that `augments_roles` references real roles in `roles/index.json`.

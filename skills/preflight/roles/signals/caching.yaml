@@ -1,0 +1,42 @@
+group: caching
+matchers:
+  - "Redis"
+  - "memcached"
+  - "cache"
+  - "Cache-Control"
+  - "ETag"
+  - "CDN"
+  - "Cloudfront"
+  - "Fastly"
+  - "Varnish"
+  - "stale-while-revalidate"
+  - 'TTL'
+augments_roles:
+  - performance
+  - data-model
+  - observability
+checklist_intro: |
+  This artifact introduces or modifies a cache layer. Walk through these
+  cache-correctness failure modes in addition to your role's lens.
+checklist:
+  - id: ttl_choice
+    title: Is the TTL chosen per-key class (with a rationale tied to write frequency and tolerance for staleness), not a single global value?
+    rationale: A flat TTL either over-stales hot data or under-utilises rarely-changing data — both look healthy on graphs while degrading correctness or hit rate.
+  - id: invalidation_path
+    title: Is there an explicit invalidation step on the write path, or is staleness purely TTL-eventual?
+    rationale: TTL-only invalidation guarantees a window of incorrect reads after every write — fine for some data, catastrophic for others (auth, balances, permissions).
+  - id: stampede_protection
+    title: On miss for a hot key, is regeneration single-flight (lock / coalesce), or do N parallel requests recompute simultaneously?
+    rationale: Cold-start, eviction, or restart triggers thundering herds on hot keys — the upstream sees a brief 100x spike and falls over.
+  - id: negative_caching
+    title: Are misses (404, empty result, error) cached too, with a shorter TTL?
+    rationale: Without negative caching, a missing-key probe loop turns the cache into a forwarder and overwhelms the slow path.
+  - id: cache_as_truth
+    title: Is the underlying store the source of truth, or has the cache become authoritative?
+    rationale: Once code reads from cache without a fallback to the store, an invalidation gap silently corrupts business state — cache is an optimisation, not storage.
+  - id: hit_rate_metric
+    title: Are hit / miss / eviction / latency metrics exported per cache, with an alert on hit-rate degradation?
+    rationale: A cache silently dropping to 30% hit rate looks identical to a healthy one until the upstream collapses under load.
+  - id: key_namespace
+    title: Are keys namespaced by tenant / version / deploy so a stale entry from a previous schema cannot be served to a new code path?
+    rationale: A schema migration that doesn't bump the cache namespace serves pre-migration shapes to post-migration code — type errors at runtime and hard-to-reproduce bugs.

@@ -1,0 +1,39 @@
+group: docker
+matchers:
+  - "Docker"
+  - "Dockerfile"
+  - "docker-compose"
+  - "Compose file"
+  - "OCI image"
+  - "container image"
+  - "podman"
+  - "buildx"
+augments_roles:
+  - ops-reliability
+  - supply-chain
+  - security
+checklist_intro: |
+  This artifact builds, ships, or runs a container. Walk through these
+  in addition to your role's lens.
+checklist:
+  - id: image_pinning
+    title: Are base images pinned by digest, not by floating tag?
+    rationale: A `:latest` or `:3` base image silently pulls a different layer set on the next build — reproducibility and supply-chain integrity vanish.
+  - id: non_root_user
+    title: Is a non-root `USER` set, and does the runtime fs match (no root-owned writable paths)?
+    rationale: A container running as UID 0 turns a single-process RCE into host-namespace impact wherever capabilities aren't dropped.
+  - id: secrets_in_layers
+    title: Are secrets injected at runtime, not baked into ENV / ARG / COPY layers?
+    rationale: Build-time `ARG` and `ENV` for credentials are visible in image history forever — `docker history` is a credential leak vector.
+  - id: healthcheck
+    title: Is a `HEALTHCHECK` (or compose-level equivalent) defined and tied to orchestrator restart policy?
+    rationale: Without one, a hung process keeps receiving traffic until something else times out — partial-failure outages live here.
+  - id: layer_cache_order
+    title: Is dependency install separated from app-code COPY so cache invalidation matches change frequency?
+    rationale: A misordered Dockerfile reinstalls all dependencies on every code change — wasted CI minutes and longer deploy windows compound fast.
+  - id: build_context
+    title: Is `.dockerignore` present, and does it exclude `.git`, secrets, build artefacts, and dev caches?
+    rationale: A 2 GB build context inflates image size and risks shipping `.env` files into the registry.
+  - id: multi_stage_isolation
+    title: For compiled languages, does the final stage drop build tools and intermediate artefacts?
+    rationale: Shipping `gcc`, `npm`, or full SDKs in production images expands attack surface and grows pulls.

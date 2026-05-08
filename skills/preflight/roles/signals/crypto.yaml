@@ -1,0 +1,52 @@
+group: crypto
+matchers:
+  - "encrypt"
+  - "encryption"
+  - "decrypt"
+  - 'AES'
+  - 'RSA'
+  - 'ECDSA'
+  - "Ed25519"
+  - "ChaCha20"
+  - 'HMAC'
+  - "MD5"
+  - "SHA-1"
+  - "SHA-256"
+  - "bcrypt"
+  - "scrypt"
+  - "argon2"
+  - "PBKDF2"
+  - 'TLS'
+  - "X.509"
+  - "mTLS"
+augments_roles:
+  - security
+  - data-model
+checklist_intro: |
+  This artifact uses cryptographic primitives. Walk through these
+  algorithm-and-key failure modes in addition to your role's lens.
+checklist:
+  - id: algorithm_choice
+    title: Are modern primitives used (AES-GCM / ChaCha20-Poly1305 for AEAD; Ed25519 / ECDSA P-256 for signatures; Argon2id / scrypt / bcrypt for passwords)?
+    rationale: MD5, SHA-1, plain CBC, RSA-PKCS1v1.5, raw SHA-256-on-passwords are broken or trivially misused — using them is a finding regardless of the surrounding design.
+  - id: aead_for_confidentiality
+    title: For confidentiality, is AEAD used, rather than home-rolled "encrypt then HMAC" or unauthenticated CBC / CTR?
+    rationale: Encryption without authentication enables padding-oracle / bit-flip attacks — recover plaintext or forge ciphertext in practice, not in theory.
+  - id: nonce_iv_uniqueness
+    title: For each (key, scheme) pair, is the IV / nonce guaranteed unique (CSPRNG with sufficient size, or monotonic counter)?
+    rationale: AES-GCM nonce reuse on the same key recovers the authentication key — a single duplicate destroys the construction.
+  - id: kdf_for_passwords
+    title: Are passwords / low-entropy secrets run through a memory-hard KDF (Argon2id / scrypt / bcrypt) with appropriate parameters, never bare SHA / HMAC?
+    rationale: A leaked SHA-256 password column is offline-cracked at billions/sec on a single GPU — KDFs raise the cost by 6+ orders of magnitude.
+  - id: timing_safe_compare
+    title: Are MAC / token / password-hash comparisons constant-time?
+    rationale: Byte-by-byte compare leaks the first differing byte through timing — given network access, an attacker recovers the token in O(length) requests.
+  - id: key_lifecycle
+    title: Is key rotation specified, and is the storage location threat-modelled (env / file / KMS / HSM with appropriate access controls)?
+    rationale: Static keys live forever and outlive their threat model — rotation is the only mitigation when a leak inevitably happens.
+  - id: tls_floor
+    title: Is the TLS / cipher floor specified (TLS ≥ 1.2, modern AEAD ciphers, no SSLv3 / TLS 1.0 fallback)?
+    rationale: Without an explicit floor, default config drifts toward broad compatibility — downgrade attacks (POODLE, BEAST) and weak suites stay reachable.
+  - id: random_source
+    title: Is the random source a cryptographic CSPRNG (`/dev/urandom`, `os.urandom`, `crypto.randomBytes`, `secrets.token_bytes`), never the language's default PRNG?
+    rationale: "`Math.random` / `random.random` / Mersenne Twister are predictable and reproducible — keys, tokens, salts must come from a CSPRNG."

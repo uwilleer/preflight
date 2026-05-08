@@ -300,7 +300,7 @@ If `last_completed_step == 11`, the run is already complete — read `report.pol
 - `meta-agents/kb-compactor.md` — role-KB dedup + consolidate + drop-stale (called by Phase C step 11; haiku ok — sole mechanical-transform task)
 - `meta-agents/adversarial.md` — concede/challenge/refine prompt fragment (appended to expert prompts at Phase B step 7.5)
 - `roles/*.md` — expert prompt catalog (run `make build-index` to refresh `roles/index.json`)
-- `roles/signals/*.yaml` — signal-group checklists: `auth`, `sql`, `frontend`, `terraform`, `api` — augmenters mixed into role-KB by selector + Phase A
+- `roles/signals/*.yaml` — signal-group checklists: `api`, `auth`, `caching`, `ci-cd`, `crypto`, `docker`, `frontend`, `llm`, `message-queue`, `mobile`, `python`, `sql`, `terraform` — augmenters mixed into role-KB by selector + Phase A
 - `roles/signals/README.md` — signal-augmenter contract (matchers, wiring, how to add new groups)
 - `schemas/expert-report.json` — JSON-schema every expert must obey
 - `schemas/synth-result.json` — strict canonical contract for synthesizer output (Phase B step 8)

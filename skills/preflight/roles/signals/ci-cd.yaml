@@ -1,0 +1,43 @@
+group: ci-cd
+matchers:
+  - "GitHub Actions"
+  - "GitLab CI"
+  - "CircleCI"
+  - "BuildKite"
+  - "Jenkins"
+  - "Argo Workflows"
+  - "Tekton"
+  - 'pull_request_target'
+  - "runs-on:"
+  - 'workflow_dispatch'
+  - '/\.github\/workflows/'
+  - '/\.gitlab-ci/'
+augments_roles:
+  - supply-chain
+  - security
+  - ops-reliability
+checklist_intro: |
+  This artifact defines or modifies a CI/CD pipeline. Walk through these
+  pipeline-trust failure modes in addition to your role's lens.
+checklist:
+  - id: action_pinning
+    title: Are third-party actions / images pinned to a commit SHA, not a moving tag?
+    rationale: Tags can be re-pointed by the action author or a compromised account — `@v3` is not immutable, `@<40-char SHA>` is.
+  - id: secret_scope
+    title: Are secrets scoped to the minimum jobs / environments that need them, and is there no plaintext echo / log of secret values?
+    rationale: A secret available to every workflow is one rogue PR away from exfil; secret values logged or printed end up in retained build artefacts.
+  - id: pull_request_target_risk
+    title: For `pull_request_target` (or equivalent fork-trusted contexts), is fork-controlled code prevented from running with write tokens?
+    rationale: "`pull_request_target` runs with repo-write secrets but checks out PR code — a single careless step turns a public repo into 'anyone can publish releases'."
+  - id: runner_isolation
+    title: For self-hosted runners, are they ephemeral per-job, with no shared state / cache between unrelated jobs?
+    rationale: Long-lived self-hosted runners leak credentials and build caches between jobs — one compromised PR poisons every build that follows.
+  - id: env_protection
+    title: Are production deploy steps gated behind environment protection rules (required reviewers, branch filter, wait timer)?
+    rationale: A merge-to-main that auto-deploys with no gate turns a rushed Friday change into Saturday on-call.
+  - id: artifact_signing_provenance
+    title: Are release artefacts signed (or built with provenance attestations like SLSA / sigstore), and consumed with verification?
+    rationale: An unsigned tarball at a stable URL is a supply-chain handoff with no integrity check — anyone with bucket access can swap it.
+  - id: workflow_idempotency
+    title: Do workflows produce identical artefacts when re-run on the same SHA (no embedded build timestamps / random IDs in the artefact)?
+    rationale: Non-reproducible builds make supply-chain audits and rollbacks unreliable — "the same code shipped" cannot be proven.

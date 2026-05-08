@@ -1,0 +1,50 @@
+group: message-queue
+matchers:
+  - "Kafka"
+  - "RabbitMQ"
+  - "Celery"
+  - "taskiq"
+  - "NATS"
+  - "Redis Streams"
+  - "queue"
+  - "broker"
+  - "publish/subscribe"
+  - "pub/sub"
+  - "consumer group"
+  - 'SQS'
+  - 'DLQ'
+  - "dead letter"
+  - "event stream"
+augments_roles:
+  - concurrency
+  - ops-reliability
+  - data-model
+  - error-handling
+checklist_intro: |
+  This artifact moves messages through a queue or stream. Walk through
+  these delivery-and-ordering failure modes in addition to your role's lens.
+checklist:
+  - id: delivery_semantics
+    title: Is delivery explicitly at-least-once, at-most-once, or exactly-once, and does the consumer match?
+    rationale: At-least-once with a non-idempotent consumer guarantees double-effects under retry; "exactly-once" without explicit support guarantees nothing.
+  - id: idempotency_key
+    title: For at-least-once delivery, is there an idempotency key dedup'd at the consumer (and a TTL on the dedup store)?
+    rationale: Network and broker retries are inevitable — no idempotency key means duplicate side effects hit production.
+  - id: dlq_path
+    title: Is a dead-letter queue wired with a retry-count cap, and is there an alert / runbook for DLQ growth?
+    rationale: Without a DLQ, a single poison message blocks the partition forever; with one but no alert, failures pile up unseen until a human notices.
+  - id: ordering_guarantees
+    title: If order matters, is the partition / routing key chosen so related messages land in the same partition, and consumer parallelism honours that boundary?
+    rationale: Parallel consumers across partitions reorder messages — "user updated then deleted" can replay as "deleted then updated" and break invariants.
+  - id: backpressure
+    title: Is queue depth bounded, and does producer behaviour on full queue (block / drop / fail-fast) match the SLA?
+    rationale: Unbounded queues turn a downstream slowdown into out-of-memory at the broker; silent drops corrupt accounting.
+  - id: ack_after_commit
+    title: Is the message ack/commit issued only after the consumer's side effect durably commits?
+    rationale: Acking before the DB write means a crash drops the message and the change — at-least-once silently degrades to at-most-once.
+  - id: schema_evolution
+    title: Is the payload schema versioned, and can consumers handle messages produced under both old and new schemas during rollout?
+    rationale: A producer/consumer schema mismatch during deploy drops or corrupts in-flight messages — Kafka keeps them long enough to bite for hours.
+  - id: consumer_lag_alert
+    title: Is consumer lag exposed as a metric with a threshold alert?
+    rationale: A consumer that quietly falls behind is invisible until users notice stale data — by then the backlog is unrecoverable in business hours.

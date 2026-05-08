@@ -1,4 +1,4 @@
-.PHONY: build-index test-index test-handoff test sync-roles clean help
+.PHONY: build-index test-index test-handoff test-signals test sync-roles clean help
 
 SKILL_DIR := skills/preflight
 ROLES_DIR := $(SKILL_DIR)/roles
@@ -11,7 +11,8 @@ help:
 	@echo "  build-index   Regenerate $(INDEX) from roles/*.md frontmatter."
 	@echo "  test-index    Assert index is non-empty and schema-valid."
 	@echo "  test-handoff  Validate phase-handoff example fixtures (v0.7.0+)."
-	@echo "  test          Run all tests (test-index + test-handoff)."
+	@echo "  test-signals  Validate roles/signals/*.yaml (schema, group/role refs)."
+	@echo "  test          Run all tests (test-index + test-handoff + test-signals)."
 	@echo "  clean         Remove generated index."
 
 sync-roles:
@@ -51,7 +52,11 @@ test-handoff:
 	@command -v uv >/dev/null 2>&1 || { echo "uv not installed (https://docs.astral.sh/uv/)"; exit 1; }
 	@./scripts/validate-handoff-examples.py
 
-test: test-index test-handoff
+test-signals: build-index
+	@command -v uv >/dev/null 2>&1 || { echo "uv not installed (https://docs.astral.sh/uv/)"; exit 1; }
+	@./scripts/validate-signals.py
+
+test: test-index test-handoff test-signals
 
 clean:
 	@rm -f $(INDEX) $(INDEX).tmp

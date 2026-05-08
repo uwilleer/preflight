@@ -1,0 +1,45 @@
+group: python
+matchers:
+  - "Python"
+  - "Pydantic"
+  - "asyncio"
+  - "FastAPI"
+  - "Django"
+  - "Flask"
+  - "Starlette"
+  - "pyproject"
+  - "requirements.txt"
+  - "uv add"
+  - "uv sync"
+  - "uv run"
+  - "poetry add"
+  - 'pip install'
+augments_roles:
+  - error-handling
+  - performance
+  - supply-chain
+checklist_intro: |
+  This artifact is Python code or design. Walk through these
+  language-specific failure modes in addition to your role's lens.
+checklist:
+  - id: async_sync_boundary
+    title: Are sync and async call sites cleanly separated, with blocking calls offloaded via `asyncio.to_thread` / `run_in_executor`?
+    rationale: A single sync DB call inside an async handler stalls the entire event loop — one slow query becomes a global latency spike.
+  - id: exception_swallow
+    title: Does the design avoid bare `except:` / `except Exception` without a re-raise, log, or domain-specific handling?
+    rationale: Broad excepts turn programmer errors into silent corruption — `KeyboardInterrupt` and `SystemExit` get swallowed too.
+  - id: mutable_defaults
+    title: Are mutable default arguments (`def f(x=[])`) avoided, or replaced with `None` + per-call construction?
+    rationale: Mutable defaults are shared across calls — state bleeds between unrelated invocations and the bug only shows in production load.
+  - id: lockfile_committed
+    title: Is the lockfile (`uv.lock` / `poetry.lock` / `requirements.txt` with hashes) committed and current?
+    rationale: Without a hashed lockfile, transitive dependency changes ship silently between deploys — a typosquat or compromised upstream lands unnoticed.
+  - id: pydantic_at_boundary
+    title: For external input (HTTP, queue, config), are typed models (Pydantic / dataclasses) enforced at the boundary, not deeper in?
+    rationale: Validation buried inside business logic is reached too late — by then the invalid value has already corrupted state or logged secrets.
+  - id: cpu_in_event_loop
+    title: For CPU-bound work in async services, is it offloaded to a worker / process pool?
+    rationale: Tight CPU loops in async code starve every other coroutine — async hides synchronous bottlenecks until concurrency rises.
+  - id: deprecated_apis
+    title: Does the code avoid stdlib APIs scheduled for removal (e.g. `asyncio.coroutine`, `imp`, `distutils`, `pkg_resources`)?
+    rationale: Deprecation warnings become hard failures on the next minor Python version — locking the project to an older runtime.

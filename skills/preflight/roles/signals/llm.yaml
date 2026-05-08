@@ -1,0 +1,48 @@
+group: llm
+matchers:
+  - 'LLM'
+  - "Anthropic"
+  - "Claude"
+  - "OpenAI"
+  - "GPT-"
+  - "prompt"
+  - "completion"
+  - "embedding"
+  - "tool use"
+  - "function calling"
+  - 'RAG'
+  - "vector store"
+  - 'streaming response'
+augments_roles:
+  - cost-infra
+  - security
+  - error-handling
+  - testing
+checklist_intro: |
+  This artifact integrates an LLM (chat, embedding, RAG, agent, tool use).
+  Walk through these LLM-specific failure modes in addition to your role's lens.
+checklist:
+  - id: prompt_injection
+    title: Is untrusted input (user message, retrieved document, tool output) clearly delimited from system instructions, and never trusted to override them?
+    rationale: A model that follows "ignore prior instructions" inside a retrieved document leaks data, calls tools out of policy, or produces malicious output — the most common new-class vuln of LLM apps.
+  - id: output_validation
+    title: Is structured model output parsed against a strict schema before any side effect (DB write, tool call, eval), with a rejection / re-prompt path on schema failure?
+    rationale: Unvalidated model output containing free-form text in a "JSON" field corrupts downstream systems or, worse, is `eval`d / SQL-concatenated into code injection.
+  - id: token_budget
+    title: Are input + max-output tokens capped per request, with cost per 1k requests projected and alertable?
+    rationale: Unbounded context grows with conversation history — cost runs 10–100x over plan and per-request latency rises until the system times out.
+  - id: retry_idempotency
+    title: Are provider retries (5xx, 429, timeouts) explicit, with backoff, and are the side effects of a partially-consumed request idempotent?
+    rationale: A streaming call that completes the side effect then errors retries the side effect — duplicate emails, double-charged tool calls, or duplicated DB rows.
+  - id: streaming_partials
+    title: For streamed responses, are partial tool-call / structured-output emissions handled — UI doesn't render half-written JSON, and tools don't fire on incomplete arguments?
+    rationale: Streamed tool calls arrive token-by-token — naively parsing on each chunk fires tools with truncated arguments and shows users garbled state.
+  - id: pii_in_prompts
+    title: Is PII / sensitive data redacted or minimised before prompting, and is the provider's data-retention / training-opt-out policy reviewed against the data class?
+    rationale: A free-form prompt that includes "redact this user's PII" sends the PII to the provider — once logged, it cannot be unsent.
+  - id: model_pinning
+    title: Is the model version pinned (`claude-opus-4-7`, not `claude-3-opus-latest`) and is there an eval / regression set checked on upgrades?
+    rationale: A silent provider-side model rev shifts behaviour on prompts that worked yesterday — without pinning + eval, the regression hits production before anyone notices.
+  - id: rate_limit_strategy
+    title: Are provider rate limits modelled (per-org, per-key, per-model), with queueing / fallback behaviour explicit on 429?
+    rationale: A burst that hits the org-level limit fails every request including unrelated traffic — without a fallback or queue, every user sees the spike.

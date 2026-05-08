@@ -1,0 +1,49 @@
+group: mobile
+matchers:
+  - 'iOS'
+  - "Android"
+  - "React Native"
+  - "Expo"
+  - "Flutter"
+  - "Swift"
+  - "Kotlin"
+  - "App Store"
+  - "Play Store"
+  - "TestFlight"
+  - "deep link"
+  - "universal link"
+  - "app link"
+  - 'OTA'
+  - "CodePush"
+augments_roles:
+  - performance
+  - security
+  - error-handling
+checklist_intro: |
+  This artifact ships native or hybrid mobile code. Walk through these
+  store / runtime / device-specific failure modes in addition to your role's lens.
+checklist:
+  - id: store_review_window
+    title: Does the rollout plan account for store review latency (1–7 days), and is there a remote-config / OTA fallback for issues that cannot wait?
+    rationale: A regression that needs a binary update is days from a fix — without a remote-toggle escape hatch, the option is "live with it or pull the app".
+  - id: cold_start_budget
+    title: Is application startup work (network, disk, init) budgeted, with non-critical paths deferred?
+    rationale: Eager init on launch breaks the perceived-performance budget — users who see a slow first launch don't return.
+  - id: deep_link_validation
+    title: Are universal / app links validated against an allowlist of paths, and are intent / activity entry points checked for forged input?
+    rationale: An unvalidated deep link is an open redirect inside the app — phishing-as-a-feature and a route into authenticated state.
+  - id: secure_storage
+    title: Are secrets and tokens in Keychain / Keystore, not `UserDefaults` / `SharedPreferences` / plain files?
+    rationale: Plaintext token storage is recoverable from device backups and rooted/jailbroken devices — the most common quiet leak vector on mobile.
+  - id: offline_resilience
+    title: For state-mutating operations, do clients queue locally and reconcile on reconnect, with explicit conflict resolution?
+    rationale: A flaky-network app that silently drops user actions corrupts trust faster than any visible error — users blame the app for "losing my data".
+  - id: ota_payload_limits
+    title: For OTA / CodePush updates, are platform size limits respected, and are native-only changes correctly excluded from the OTA path?
+    rationale: A native-binding change pushed via OTA crashes on launch with no rollback — the only fix is a store submission.
+  - id: crash_telemetry
+    title: Is a crash reporter wired with debug-symbol / dSYM / mapping uploads automated in the release pipeline?
+    rationale: Crash reports without symbols are unreadable hex — debugging from user reports alone wastes days.
+  - id: backgrounding_state
+    title: Does the design handle process suspension / kill while a critical operation is in flight (payment, upload, login)?
+    rationale: iOS / Android can kill backgrounded processes at any time — operations that don't checkpoint resume in inconsistent states.
