@@ -1,0 +1,38 @@
+group: migrations
+matchers:
+  - "ALTER TABLE"
+  - "CREATE INDEX"
+  - "DROP COLUMN"
+  - "DROP TABLE"
+  - "ADD COLUMN"
+  - "ADD CONSTRAINT"
+  - "Alembic"
+  - "alembic"
+  - "Flyway"
+  - "Liquibase"
+  - "schema_version"
+  - "/\\bbackfill\\b/"
+  - "/\\bmigration\\b/"
+augments_roles:
+  - migration-safety
+  - data-model
+  - ops-reliability
+checklist_intro: |
+  This artifact mutates persistent state. Walk through these
+  rollout-safety concerns in addition to your role's lens.
+checklist:
+  - id: lock_impact
+    title: Does the migration take a long-held lock on a hot table?
+    rationale: AccessExclusiveLock on a 100M-row table during business hours is an outage.
+  - id: rollout_phase
+    title: Is the change expand-contract phased, or single-shot?
+    rationale: Single-shot ALTER plus code deploy that depends on the new column produces a race window.
+  - id: backfill_strategy
+    title: If new columns require backfill, is it batched and resumable?
+    rationale: One giant UPDATE on a large table holds row locks and bloats WAL.
+  - id: rollback_plan
+    title: Is there a written rollback path for this migration?
+    rationale: '"Only roll forward" is not a plan — it is a hope.'
+  - id: dual_write_window
+    title: If old and new code coexist mid-deploy, is dual-write/dual-read defined?
+    rationale: Forgotten dual-write windows are the most common cause of "the migration looked fine" incidents.
