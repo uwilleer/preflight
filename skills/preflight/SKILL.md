@@ -84,17 +84,54 @@ Parse the return against `schemas/phase-handoff.json#/definitions/phase_a_output
 - If `error_path` is set: Read that file, print contents verbatim, stop.
 - If `aborted` is set: print `aborted.reason` to user, stop. The plan needs iteration before a panel is worth running.
 - If `gate` is `null`: announce one line `"no blockers — launching panel"`, go straight to Phase B.
-- Otherwise (`gate` is an object): emit `gate.render` verbatim to the user. If `render_too_long` is true, Read `<workspace_path>/gate.md` and emit that instead. Wait for the user's answer.
+- Otherwise (`gate` is an object): render the gate as an interactive picker via `AskUserQuestion` (preferred) or fall back to text rendering. See "Gate rendering" below.
+
+### Gate rendering
+
+**Primary path — `AskUserQuestion`.**
+
+1. Read `gate.gate_json_path` (the structured form). The shape is `{questions: [{id, header, type, prompt, options?, evidence_path}]}`.
+2. Partition questions by type:
+   - `binary` and `choice` → "structured", will go into `AskUserQuestion`.
+   - `open` → "free-form", handled separately as a text follow-up.
+3. If structured questions exist, build **one** `AskUserQuestion` call. Each entry:
+   - `question` ← `q.prompt`
+   - `header` ← `q.header` (already ≤12 chars from Phase A)
+   - `multiSelect: false`
+   - `options[]` ← for each `opt` in `q.options[]`: `{label: opt.label, description: "+ <opt.pros>\n− <opt.cons>"}` (newline-separated; both lines kept verbatim from Phase A).
+4. Issue the `AskUserQuestion` call. Phase A's pre-emit cap (`> 4 questions → abort`) guarantees ≤4 entries per call.
+5. After the picker resolves, scan the picked option for each structured question — if `opt.pros` (or `opt.label`) mentions `paste` or `probe output`, emit a one-line follow-up like `"paste the probe output now (or 'skip'):"` and append the user's verbatim reply to that question's answer as `<key>\n<paste>`. The deploy-state gate question is the canonical case (option `[a]`).
+6. For each free-form (`open`) question: emit `q.prompt` as a single short text line and wait for the user's reply. Collect each reply alongside the picker answers.
+
+**Fallback path — text render.** Use the legacy text path when *any* of these holds:
+- `gate.json_path` is missing, unreadable, or schema-invalid.
+- Every question has `type: open` (nothing structured to render).
+- `render_too_long: true` (gate.md too large to inline).
+
+In the fallback path, emit `gate.render` verbatim — or, if `render_too_long: true`, Read `<workspace_path>/gate.md` and emit that. Wait for the user's free-form reply (e.g. `"1=a 2=b 3=actually X"`).
 
 ### Gate iteration (between A and B)
 
-When the user replies to the gate, parse the answer:
+Translate the user's answers to the on-disk format and decide the next move.
 
-- **Simple resolution** (`"1=a 2=b"` or natural-language picks among the offered options): write the parsed answers to `<workspace_path>/gate_answers.json` as `{questions: [{id, answer}]}`, proceed to Phase B.
-- **Abort** (user says "stop", "no", "cancel"): write `<workspace_path>/aborted.json` with the user's reason, stop.
-- **Material change to load-bearing facts** (user contradicts a fact in the brief, names a new file, says "actually X is at line Y"): re-spawn Phase A with `resume_from: <workspace_path>` and `gate_answers: <parsed answers>`. Phase A will patch `brief.md` / `ground_truth.json` and re-emit a (possibly empty) gate. Iterate until `gate == null` or user aborts.
+**Per-answer mapping (primary path).**
 
-If the answer is ambiguous, ask one short clarifying question — do not guess.
+For each picker answer (`AskUserQuestion`'s `answers[question_text]`):
+- Look up the matching question in `gate.json` (by `prompt` string equality — `question_text` is `q.prompt` verbatim).
+- If the answer string matches one of the option `label` values: record `{id: q.id, answer: opt.key}` (the `a`/`b`/`c` key from `gate.json`).
+- If the answer is the literal `"Other"`: read `annotations[question_text].notes` (free-form text the user typed). Record `{id: q.id, answer: "<notes>"}`. Treat `"Other"` *without* notes as the empty string `""`.
+
+For each free-form follow-up reply (open question): record `{id: q.id, answer: "<reply text>"}`.
+
+**Per-answer mapping (fallback path).** Parse the user's free-form reply as before — `"1=a 2=b 3=text"` style or natural-language picks among the offered options.
+
+**Decide the next move based on the assembled answers:**
+
+- **Abort** (user says `"stop"`, `"no"`, `"cancel"` anywhere in the gate, including via an `Other`+notes answer): write `<workspace_path>/aborted.json` with the user's reason, stop.
+- **Material change to load-bearing facts.** Trigger when *any* answer contains free-form content with at least one of these signals: a `path/to/file` slash-bearing token, a `file:line` reference, the literal word `actually`, a four-or-more-digit line number adjacent to a file token, or explicit contradiction of a brief fact (e.g. `"the migration target is X, not Y"`). Re-spawn Phase A with `resume_from: <workspace_path>` and `gate_answers: {questions: [{id, answer}, ...]}`. Phase A will patch `brief.md` / `ground_truth.json` and re-emit a (possibly empty) gate. Iterate until `gate == null` or user aborts. Apply the same heuristics to fallback-path replies.
+- **Simple resolution** (no abort signal, no material-change signal): write `<workspace_path>/gate_answers.json` as `{questions: [{id, answer}]}` directly, proceed to Phase B.
+
+If the answer set is ambiguous (e.g. `Other`+notes that could be either a material change or just a reworded pick), ask one short clarifying question — do not guess.
 
 ### Phase B — dispatch, synth, render (round-trip loop, v0.7.0)
 

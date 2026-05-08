@@ -56,23 +56,27 @@
             { "type": "null" },
             {
               "type": "object",
-              "required": ["questions_count", "render"],
+              "required": ["questions_count", "render", "gate_json_path"],
               "additionalProperties": false,
               "properties": {
                 "questions_count": {
                   "type": "integer",
                   "minimum": 1,
-                  "maximum": 5,
-                  "description": "Count of questions in gate.json — if > 5, Phase A aborts instead (see 'aborted')."
+                  "maximum": 4,
+                  "description": "Count of questions in gate.json — capped at 4 to fit AskUserQuestion (see SKILL.md 'Handle the handoff'). If > 4, Phase A aborts instead (see 'aborted')."
                 },
                 "render": {
                   "type": "string",
                   "maxLength": 4000,
-                  "description": "Markdown body of gate.md. Emit empty string AND render_too_long: true when gate.md exceeds 4000 chars — main session falls back to reading the file from disk."
+                  "description": "Markdown body of gate.md. Used as a fallback render path when gate.json cannot be parsed structurally or when every question is type=open. Emit empty string AND render_too_long: true when gate.md exceeds 4000 chars — main session falls back to reading the file from disk."
                 },
                 "render_too_long": {
                   "type": "boolean",
                   "description": "Set true when gate.md was too large to inline; main session reads workspace_path/gate.md instead."
+                },
+                "gate_json_path": {
+                  "type": "string",
+                  "description": "Absolute path to $WORKSPACE/gate.json — the structured form of the gate. Main session reads this and renders binary/choice questions through AskUserQuestion (interactive picker), with text fallback for type=open. See SKILL.md 'Handle the handoff' for the rendering contract."
                 }
               }
             }

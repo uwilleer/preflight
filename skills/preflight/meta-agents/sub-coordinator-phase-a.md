@@ -248,11 +248,11 @@ If there are no such items, **auto-proceed**: return `gate: null`. The main sess
 
 If two options share the same trade-off dimension (e.g. both differ on scope), name the same dimension on both with opposite values, so the user can compare on the axis they care about. Skip the `+` / `−` lines for `open` questions — those have no fixed alternatives. Keep each `+` / `−` line short (one phrase, ≤ ~80 chars); long prose belongs in `brief.md`, not the gate.
 
-**Language.** `gate.md` and the `prompt` / `options` strings in `gate.json` are user-facing — render them in `user_language`. Keep technical tokens verbatim: file paths, `file:line` refs, command lines, JSON keys, role names, CLI flags, the `[a]` / `[b]` / `[c]` option markers, the `+` / `−` markers, the `Answers:` example syntax. The `id`, `type`, and `evidence_path` fields are machine-internal — keep English / lowercase ASCII.
+**Language.** `gate.md` and the `prompt` / `header` / `options` strings in `gate.json` are user-facing — render them in `user_language`. Keep technical tokens verbatim: file paths, `file:line` refs, command lines, JSON keys, role names, CLI flags, the `[a]` / `[b]` / `[c]` option markers, the `+` / `−` markers, the `Answers:` example syntax. The `id`, `type`, and `evidence_path` fields are machine-internal — keep English / lowercase ASCII.
 
 **Write two files:**
-- `$WORKSPACE/gate.json` — `{questions: [{id, type, prompt, options?, evidence_path}]}`. For `binary` / `choice` questions, each `options[]` entry has shape `{key: "a"|"b"|..., label: "<short action>", pros: "<what's gained>", cons: "<what's given up>"}`. `evidence_path` points back into `ground_truth.json` or `brief.md`.
-- `$WORKSPACE/gate.md` — what the user sees. Compact render:
+- `$WORKSPACE/gate.json` — `{questions: [{id, header, type, prompt, options?, evidence_path}]}`. For `binary` / `choice` questions, each `options[]` entry has shape `{key: "a"|"b"|..., label: "<short action>", pros: "<what's gained>", cons: "<what's given up>"}`. `evidence_path` points back into `ground_truth.json` or `brief.md`. `header` is a short tag (≤12 chars, rendered in `user_language`) used by the main session to build the `AskUserQuestion` chip — pick a topical noun-phrase, e.g. "Развёртыван", "Объём", "Роли", "Auth", "Schema". Do not abbreviate with ellipses; if the natural phrase exceeds 12 chars, choose a shorter synonym.
+- `$WORKSPACE/gate.md` — fallback render the main session uses only when the structured gate.json path cannot be honored (oversized render, every question is `type: open`, or read failure). Compact body:
 
 ```
 ## Preflight · <artifact name>
@@ -284,14 +284,15 @@ Answers: as a string like "1=a 2=b 3=let me test first", or free-form.
 
 No headings beyond the `##` title. No verbatim dumps of brief or ground_truth.
 
-**Pre-emit check.** Count questions. If > 5, return `{aborted: {reason: "plan needs iteration before review — <N> blockers in gate.md"}}`. Do not run a panel against a fundamentally broken premise.
+**Pre-emit check.** Count questions. If > 4, return `{aborted: {reason: "plan needs iteration before review — <N> blockers in gate.md"}}`. Do not run a panel against a fundamentally broken premise. The cap is 4 because main session renders the gate through `AskUserQuestion`, which accepts at most 4 questions per call.
 
 **Re-iteration path.** If the invocation included `gate_answers`, patch `brief.md` / `ground_truth.json` in place per answers, regenerate `gate.md` with remaining open questions (if any), and return the new gate. The main session may call you multiple times until no questions remain.
 
-**Deploy-state gate answer handling** (when the re-iteration answers the `deploy_targets_unverified` question):
-- `[a]` + pasted probe output → set `ground_truth.deploy_probe = {output: "<verbatim user text>", received_at_iso: "<now>"}`, set `ground_truth.deploy_targets_unverified = false`, drop the question from the regenerated gate.
-- `[b]` (assume) → keep `ground_truth.deploy_targets_unverified = true`, set `ground_truth.deploy_state_assumption = "matches local workspace — user accepted MUST-FIX risk"`, drop the question from the regenerated gate. `ops-reliability` will still fire its auto-MUST on the flag.
-- `[c]` (n/a) → set `ground_truth.deploy_targets_unverified = false` AND `ground_truth.deploy_not_applicable = true` (so the auto-MUST in `ops-reliability` does not fire), drop the question. If the artifact genuinely has deploy keywords the user may be wrong — that is their choice; do not second-guess.
+**Deploy-state gate answer handling** (when the re-iteration answers the `deploy_targets_unverified` question). The main session writes the picker key (`"a"`/`"b"`/`"c"`) into `gate_answers.questions[].answer`, optionally followed by `\n<probe output>` when the picked option asked the user to paste:
+- key `a` with non-empty paste body after the first newline → set `ground_truth.deploy_probe = {output: "<paste verbatim>", received_at_iso: "<now>"}`, set `ground_truth.deploy_targets_unverified = false`, drop the question from the regenerated gate.
+- key `a` with no paste body (user replied `"skip"` or empty) → treat as key `b` below.
+- key `b` (assume) → keep `ground_truth.deploy_targets_unverified = true`, set `ground_truth.deploy_state_assumption = "matches local workspace — user accepted MUST-FIX risk"`, drop the question from the regenerated gate. `ops-reliability` will still fire its auto-MUST on the flag.
+- key `c` (n/a) → set `ground_truth.deploy_targets_unverified = false` AND `ground_truth.deploy_not_applicable = true` (so the auto-MUST in `ops-reliability` does not fire), drop the question. If the artifact genuinely has deploy keywords the user may be wrong — that is their choice; do not second-guess.
 
 Update `_index.json.last_completed_step = 6`.
 
@@ -306,15 +307,16 @@ Return **only** this JSON (no prose, no markdown, no thinking block commentary):
   "workspace_path": "/abs/path/to/$WORKSPACE",
   "last_completed_step": 6,
   "gate": null | {
-    "questions_count": <1..5>,
-    "render": "<contents of gate.md, ≤8000 chars>",
-    "render_too_long": false
+    "questions_count": <1..4>,
+    "render": "<contents of gate.md, ≤4000 chars>",
+    "render_too_long": false,
+    "gate_json_path": "/abs/path/to/$WORKSPACE/gate.json"
   },
   "aborted": { "reason": "..." }  // only if aborted; omit otherwise
 }
 ```
 
-If `gate.md` exceeds 8000 chars, emit `render: ""` and `render_too_long: true` — the main session will Read the file itself.
+If `gate.md` exceeds 4000 chars, emit `render: ""` and `render_too_long: true` — the main session will Read the file itself. `gate_json_path` is required whenever `gate` is non-null and points at the structured form (the primary input for `AskUserQuestion` rendering on the main side).
 
 On any exception: write `$WORKSPACE/phase-a-error.json` with `{step, message, stack_trace, partial_state_paths}`, then return `{workspace_path, last_completed_step: <step before failure>, error_path: "<abs path to phase-a-error.json>"}`.
 
