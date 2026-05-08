@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- **`/preflight fast` mode** — new optional keyword after `/preflight` invocation. When detected, sets `cost_profile: "fast"` which skips adversarial phase (7.5) and verifier phase (8.5) in Phase B, and forces sonnet for the synthesizer. Reduces Phase B cost and latency at the cost of narrower dispute coverage.
+- **Synthesizer model rule tightening in thorough mode** — opus is now required only when the panel has ≥4 roles with active challenges flagged post-adversarial. Sonnet suffices for smaller or aligned panels, reducing cost without affecting coverage on lightweight panels.
+
+### Changed
+- **`cost_profile` threading through Phase A → Phase B** — new optional `cost_profile` field in phase-handoff JSON, auto-detected from `/preflight [fast] <artifact>` syntax, persisted through `_index.json`, and applied by Phase B synthesizer dispatch logic.
+
+---
+
 Three follow-up items after the v0.7.x docs/policy actualization: extract the KB-compactor into its own meta-agent file (issue #12); add a strict standalone schema for synthesizer output plus fixtures and validation (issue #10, scope-down); and add latency instrumentation (`coordinator_spawns[]` and expanded `dispatch[]` in `_index.json`) so future optimization work has empirical numbers instead of guesses. Plus a discovery-only tweak shifting `SKILL.md`'s `description` from opt-in to default-gate framing — preflight is now invoked pre-emptively before any non-trivial implementation rather than only on explicit panel-review requests. A future-direction note records why "pyramidal preflight" (multi-layer auto-cascading review) is deferred rather than pursued (cost, diminishing returns past the design layer, conflict with sibling skills like `requesting-code-review` and linters).
 
 ### Added
