@@ -10,10 +10,19 @@ matchers:
   - "bundle"
   - "client-side"
   - "TypeScript"
+  - "alt="
+  - "aria-"
+  - "role="
+  - "useTranslation"
+  - "Intl."
+  - "gettext"
+  - "/\\bt\\([\"']/"
 augments_roles:
   - performance
   - security
   - testing
+  - accessibility
+  - i18n
 checklist_intro: |
   This artifact involves frontend / browser code. Walk through these
   UA-side concerns in addition to your role's lens.
@@ -33,3 +42,15 @@ checklist:
   - id: state_persistence
     title: Where does this component's state live (local / store / URL / server)?
     rationale: Wrong state location is the root cause of "why does my filter reset on refresh" bugs.
+  - id: a11y_focus_management
+    title: Where does focus go when modals/routes change in this artifact?
+    rationale: Unmanaged focus on modal/route change is the most common keyboard-user trap.
+  - id: a11y_label_association
+    title: Are inputs associated with visible labels via for / aria-labelledby?
+    rationale: Placeholder-as-label is the canonical accessibility regression.
+  - id: i18n_string_channel
+    title: Are user-facing strings routed through the project's i18n channel?
+    rationale: Hardcoded strings are silent until a translator notices — or doesn't.
+  - id: i18n_locale_format
+    title: Are dates / numbers / currency formatted via Intl (or equivalent) with explicit locale?
+    rationale: Implicit locale format is the canonical i18n regression.
