@@ -63,12 +63,14 @@ Return **strictly** this JSON, no prose:
 {
   "role": "<name>",
   "verdict": "APPROVE" | "REVISE" | "REJECT",
-  "must_fix":   [{"title": "...", "evidence": "...", "replacement": "..."}],
-  "should_fix": [{"title": "...", "evidence": "...", "replacement": "..."}],
-  "nice_fix":   [{"title": "...", "evidence": "...", "replacement": "..."}],
+  "must_fix":   [{"title": "...", "evidence": "...", "replacement": "...", "evidence_source": "artifact_self"}],
+  "should_fix": [{"title": "...", "evidence": "...", "replacement": "...", "evidence_source": "artifact_self"}],
+  "nice_fix":   [{"title": "...", "evidence": "...", "replacement": "...", "evidence_source": "reasoning"}],
   "out_of_scope": [{"topic": "...", "owner_role": "..."}]
 }
 ```
+
+`evidence_source` is required on every finding per `schemas/expert-report.json`; values: `code_cited`, `doc_cited`, `artifact_self`, `artifact_code_claim`, `reasoning`. The coordinator appends the full claim-citation discipline block to your prompt — follow it.
 
 Verdict rule:
 - `REJECT` — actively unusable for keyboard or screen-reader users; legal compliance impossible as designed.
