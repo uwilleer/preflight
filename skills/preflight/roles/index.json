@@ -1,5 +1,25 @@
 [
   {
+    "name": "accessibility",
+    "when_to_pick": "Artifact involves user-facing UI — components, pages, forms, interactive elements, modals, or any browser-rendered surface a human will operate.",
+    "tags": [
+      "accessibility",
+      "a11y",
+      "wcag",
+      "aria",
+      "keyboard",
+      "screen-reader",
+      "contrast",
+      "focus"
+    ],
+    "skip_when": "Pure backend code with no rendered output. Build tooling, CLI, infrastructure-only changes. Documentation-only changes that don't include UI examples.",
+    "context_sections": [
+      "conventions",
+      "architecture",
+      "api_surface"
+    ]
+  },
+  {
     "name": "api-design",
     "when_to_pick": "Artifact introduces or changes a public or internal API — REST endpoints, RPC methods, event schemas, SDK interfaces, or CLI commands.",
     "tags": [
