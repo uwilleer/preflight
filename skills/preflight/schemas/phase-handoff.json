@@ -32,6 +32,11 @@
         "gate_answers": {
           "type": ["object", "null"],
           "description": "Only present on Phase A re-iteration — user's answers to the previous gate that changed load-bearing facts, forcing brief/ground_truth regeneration."
+        },
+        "cost_profile": {
+          "type": "string",
+          "enum": ["fast"],
+          "description": "Cost/quality tradeoff profile. 'fast' skips adversarial (7.5), verifier (8.5), forces sonnet for synthesizer. Default 'thorough' when absent."
         }
       }
     },
@@ -119,6 +124,11 @@
         "resume_token": {
           "type": ["string", "null"],
           "description": "v0.7.0+: set on coordinator re-spawns within a single Phase B run (after main has executed the previous dispatch's Agent calls and written results to workspace). The coordinator uses it (alongside _index.json.last_completed_step and which workspace files exist) to decide what to do next. null on first spawn."
+        },
+        "cost_profile": {
+          "type": "string",
+          "enum": ["fast"],
+          "description": "Cost/quality tradeoff profile. Passed by main on every Phase B spawn. Default 'thorough' when absent."
         }
       }
     },
