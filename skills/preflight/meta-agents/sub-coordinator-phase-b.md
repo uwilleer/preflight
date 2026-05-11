@@ -57,7 +57,8 @@ On every spawn (first or resume), determine the next pending step by inspecting 
 | Workspace state | Next pending action |
 |---|---|
 | No `expert_reports/` directory or empty | **emit step 7** (parallel expert dispatch) |
-| `expert_reports/*.json` exist for all chosen roles, no `adversarial_round.json` | evaluate step 7.5 skip condition; **emit step 7.5** or jump to step 8 emit |
+| `expert_reports/*.json` exist for all chosen roles, no `expert_findings/` directory or incomplete | **7.resume** — validate reports, write `expert_findings/<role>.json`, return `action: "continue"` with `resume_token: "post-7-ready"` |
+| `expert_reports/*.json` and `expert_findings/*.json` both exist, no `adversarial_round.json` | evaluate step 7.5 skip condition; **emit step 7.5** or jump to step 8 emit |
 | `adversarial_round.json` exists, no `synth_result.json` | drift pre-check inline + **emit step 8** (synthesizer) |
 | `synth_result.json` exists, no `verification_round.json` | evaluate step 8.5 skip condition; **emit step 8.5** or jump to step 9 |
 | `verification_round.json` exists, no `report.md` | **render step 9 inline** + return `action: "complete"` |
@@ -163,7 +164,9 @@ Return:
 
 Do NOT update `_index.json.last_completed_step = 7` here — that happens in 7.resume after main confirms the files landed.
 
-### 7.resume (workspace shows expert_reports/, no adversarial_round.json yet)
+### 7.resume (workspace shows expert_reports/, no expert_findings/, no adversarial_round.json)
+
+This spawn ONLY validates and writes compact findings. It does NOT build adversarial prompts — that happens in the next spawn to avoid context overflow from holding full expert reports and generating large prompts simultaneously.
 
 1. **Verify expected files.** For each role in `roster.chosen[]`:
    - File exists and is valid JSON → keep.
@@ -174,15 +177,40 @@ Do NOT update `_index.json.last_completed_step = 7` here — that happens in 7.r
 
 3. **Update `_index.json`.** Set `last_completed_step = 7`. Append the per-role dispatch outcomes (model used, status) under `_index.json.dispatch[]`.
 
-4. **Proceed to step 7.5 evaluation.** Compute the skip condition (below) and either emit step 7.5 dispatch or jump to step 8 evaluation.
+4. **Write compact findings.** For each validated (non-skipped) role, create `$WORKSPACE/expert_findings/<role>.json`:
+
+   ```json
+   {
+     "role": "<role>",
+     "must_fix": [ /* verbatim must_fix array from expert_reports/<role>.json */ ],
+     "should_fix": [ /* verbatim should_fix array from expert_reports/<role>.json */ ]
+   }
+   ```
+
+   Write one file per role. Skipped roles do NOT get a findings file (their absence is what indicates they were skipped to the next spawn).
+
+5. **Return `action: "continue"`** to signal a fresh-context spawn for step 7.5:
+
+   ```json
+   {
+     "workspace_path": "<same>",
+     "last_completed_step": 7,
+     "action": "continue",
+     "resume_token": "post-7-ready"
+   }
+   ```
+
+   Main re-spawns coordinator immediately without any Agent calls.
 
 ## Step 7.5 — adversarial round (gated)
 
 ### 7.5.emit (skip-or-dispatch)
 
+**Context note:** This spawn runs AFTER the 7.resume `continue` round-trip. The coordinator starts with a fresh context window. Read `expert_findings/*.json` (compact, ~3 KB each) — NOT `expert_reports/*.json` (large). The full report paths are passed as `your_prior_report_path` references to the expert agents; they read their own reports directly.
+
 **Skip condition:** skip the adversarial round if ANY of:
 - Total panel size < 3 (binary panels can legitimately agree without flagging groupthink — same threshold the synthesizer uses for `correlated_bias_risk`)
-- Sum of `must_fix.length + should_fix.length` across ALL expert reports < 2 (nothing substantive to challenge — same threshold the synthesizer uses for `correlated_bias_risk`)
+- Sum of `must_fix.length + should_fix.length` across ALL expert findings files < 2 (nothing substantive to challenge — same threshold the synthesizer uses for `correlated_bias_risk`)
 - `_index.json` contains `"preflight_no_adversarial": true` (legacy escape hatch for cost-sensitive runs)
 - `cost_profile == "fast"` (fast mode always skips adversarial)
 
@@ -193,10 +221,11 @@ These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bi
 **Otherwise:**
 
 1. **Build peer-findings batch per expert.** For each expert role in the panel:
-   - Collect `must_fix` and `should_fix` from ALL OTHER experts' reports.
+   - Read `$WORKSPACE/expert_findings/<role>.json` (compact — `{role, must_fix, should_fix}`).
+   - Collect `must_fix` and `should_fix` from ALL OTHER roles' findings files.
    - Assign stable ids: `"<reporter_role>:<tier>:<index>"` (e.g., `"security:must:0"`, `"performance:should:2"`).
    - Take top 8 by tier-then-alphabetical-role order.
-   - This expert's input: `{your_prior_report: <their own report>, peer_findings: [<top 8>]}`.
+   - This expert's inputs: `{your_prior_report_path: "<workspace>/expert_reports/<role>.json", peer_findings: [<top 8>]}`.
 
 2. **Construct dispatch.** One request per role:
 
@@ -206,7 +235,7 @@ These thresholds are deliberately aligned with `synthesizer.md`'s `correlated_bi
      "subagent_type": "general-purpose",
      "model_hint": "<same model used in step 7 — read from _index.json.dispatch[]>",
      "description": "Preflight adversarial pass: <role>",
-     "prompt": "<role prompt>\n\n---\n\n<adversarial.md content>\n\n## Adversarial round inputs\n\n<JSON.stringify({your_prior_report, peer_findings})>\n\nAppend adversarial_responses[] to your ExpertReport JSON and return the complete updated report.",
+     "prompt": "<role prompt>\n\n---\n\n<adversarial.md content>\n\n## Adversarial round inputs\n\n<JSON.stringify({your_prior_report_path, peer_findings})>\n\nRead your prior report from `your_prior_report_path` first. Then append adversarial_responses[] to your ExpertReport JSON and return the complete updated report.",
      "save_to": "<workspace_path>/expert_reports_post_adversarial/<role>.json",
      "schema_ref": "schemas/expert-report.json",
      "on_failure": "mark_skipped"

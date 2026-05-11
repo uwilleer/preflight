@@ -6,7 +6,7 @@ This prompt fragment is APPENDED to an expert role's prompt during Phase B step 
 
 ```json
 {
-  "your_prior_report": { "...your step-7 ExpertReport JSON..." },
+  "your_prior_report_path": "<absolute path — read this file first to load your step-7 ExpertReport>",
   "peer_findings": [
     {
       "id": "<stable id, e.g. 'security:must:0'>",
@@ -19,6 +19,8 @@ This prompt fragment is APPENDED to an expert role's prompt during Phase B step 
   ]
 }
 ```
+
+**First action:** read the file at `your_prior_report_path`. This is your complete step-7 ExpertReport JSON. You will need it to produce the updated report in the output.
 
 `peer_findings` excludes your own findings. It includes only `must_fix` and `should_fix` from other experts (max 8 entries — largest panels are pre-trimmed by the coordinator).
 

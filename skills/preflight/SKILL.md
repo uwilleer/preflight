@@ -1,6 +1,16 @@
 ---
 name: preflight
-description: Default gate before any non-trivial implementation, refactor, or architecture change — invoke pre-emptively, do NOT wait for an explicit "panel review" request. Multi-agent panel analysis is an investment that prevents rework: cost-per-run is acceptable, weeks of analysis are preferable to weeks of bug-fixes. Assembles 3-5 independent expert agents (security, performance, testing, domain-specific) running in parallel, then synthesizes severity-ranked findings. Trigger criteria (any one is enough): user asks to implement, add, build, redesign, refactor, rework, or fix non-trivial behavior; touches 2+ files; modifies shared-state code (auth, tokens, proxy/DB logic, session handling, middleware); introduces new endpoints/components/abstractions/migrations; cross-component changes (backend+frontend, extension+backend); user presents any plan, spec, RFC, design proposal, or architectural sketch for review. Explicit trigger phrases: "/preflight", "panel review", "multi-perspective review", "assemble the panel", "preflight this plan", "expert panel". SKIP only for clearly atomic isolated work: typo/whitespace/comment fixes, single-line bug fixes with stack trace + file:line already known, lint/test/format runs, file/status inspection, constant value tweaks, dead-code removal in unused files, README/docs-only edits, dependency bumps without API change. When in doubt, run it. Ordering: invoke after dispatcher's deep-path verdict (if dispatcher routed to fast path, the task is below preflight's threshold); run BEFORE decomposing-large-tasks and brainstorming — preflight's architectural findings should inform decomposition and creative exploration. Use INSTEAD of plan-critic when the artifact touches multiple domains. Do NOT use for code review after implementation (that's requesting-code-review), for parallel task dispatch (that's dispatching-parallel-agents), for orchestrator-mode dispatch of coding tasks (that's orchestrator), or for general codebase exploration without a panel (that's researcher).
+description: >
+  Pre-implementation review panel — invoke before writing code for major changes, and whenever
+  the user types /preflight or asks for "panel review" or "multi-perspective review".
+  Use proactively whenever you see: (a) a plan, spec, or RFC file the user wants reviewed before
+  coding; (b) changes touching auth, sessions, tokens, encryption, or permissions; (c) database
+  schema migrations or new table/index designs; (d) a feature spanning 3+ files or crossing
+  component boundaries; (e) redesigns or rewrites of existing systems; (f) adding async
+  infrastructure (queues, workers, caches). Assembles 3-5 independent expert agents (security,
+  performance, testing, domain-specific) in parallel, synthesizes severity-ranked findings.
+  Skip for: typos/renames, single-file bug fixes with a known stack trace, read-only questions,
+  lint/format/test runs, or reviewing code that is already written and committed.
 tools: Glob, Grep, Read, Bash, WebFetch, WebSearch, Agent
 ---
 
@@ -148,7 +158,7 @@ If the answer set is ambiguous (e.g. `Other`+notes that could be either a materi
 
 ### Phase B — dispatch, synth, render (round-trip loop, v0.7.0)
 
-Phase B coordinator under v0.7.0 returns one of `complete | dispatch | error` per spawn. Main session runs a loop: spawn coordinator → if `dispatch`, execute the requested `Agent` calls and write results to `save_to` paths → re-spawn coordinator with `resume_token` set. Loop terminates on `complete` or `error`. Worst case: 5 coordinator spawns (initial + 4 dispatch round-trips for steps 7, 7.5, 8, 8.5). Common case: 3–4. See `docs/specs/2026-05-03-phase-b-main-driven-dispatch.md`.
+Phase B coordinator under v0.7.0 returns one of `complete | dispatch | continue | error` per spawn. Main session runs a loop: spawn coordinator → if `dispatch`, execute the requested `Agent` calls and write results to `save_to` paths → re-spawn coordinator with `resume_token` set; if `continue`, re-spawn immediately with `response.resume_token` (no Agent calls). Loop terminates on `complete` or `error`. Worst case: 6 coordinator spawns (initial + step-7 dispatch + step-7-validate + step-7.5 dispatch + step-8 dispatch + step-8.5 dispatch). Common case: 4–5. See `docs/specs/2026-05-03-phase-b-main-driven-dispatch.md`.
 
 The loop matters because empirically `Agent` is not delivered to subagent contexts in current CC builds — only the main session can issue `Agent` calls. The coordinator is now a state machine over workspace files; main is the executor.
 
@@ -185,6 +195,8 @@ Parse the return against `schemas/phase-handoff.json#/definitions/phase_b_output
 
 - **`"error"`** — terminal failure. Read `error_path`, print contents verbatim, stop. Do NOT spawn Phase C.
 
+- **`"continue"`** — coordinator completed a write-only step and needs a fresh context window. No Agent calls. Re-spawn coordinator immediately with `response.resume_token` (step 4). No `dispatch[]` entries written for this round-trip.
+
 - **`"dispatch"`** — execute the dispatch (step 3 below), then re-spawn coordinator (step 4).
 
 **3. Executing a dispatch:**
@@ -204,9 +216,15 @@ Do NOT modify `request.prompt` — coordinator built it deliberately. Main is a 
 **4. Re-spawn coordinator:**
 
 ```
+// For action == "continue": resume_token is response.resume_token
+// For action == "dispatch": resume_token is response.dispatch.resume_token
+const resumeToken = response.action === "continue"
+  ? response.resume_token
+  : response.dispatch.resume_token;
+
 Agent(
   subagent_type: general-purpose,
-  description: "Preflight phase B coordinator (resume <resume_token>)",
+  description: "Preflight phase B coordinator (resume <resumeToken>)",
   prompt: <full content of skills/preflight/meta-agents/sub-coordinator-phase-b.md>
          + "\n\n## Invocation inputs\n\n"
          + JSON.stringify({
@@ -214,7 +232,7 @@ Agent(
              gate_answers_path: <same>,
              user_language: <same>,
              cost_profile: <same cost_profile detected at invocation>,
-             resume_token: response.dispatch.resume_token
+             resume_token: resumeToken
            })
          + "\n\nReturn ONLY the JSON handoff specified in the output section. No prose."
 )
